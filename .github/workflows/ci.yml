@@ -1,0 +1,30 @@
+name: Build and release checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore locked dependencies
+        run: dotnet restore src/Anime4KEncoder/Anime4KEncoder.csproj -r win-x64 --locked-mode
+      - name: Build Windows app
+        run: dotnet build src/Anime4KEncoder/Anime4KEncoder.csproj -c Release -r win-x64 --no-restore
+      - name: Verify persistent data across updates
+        run: dotnet run --project tests/ReleaseChecks/ReleaseChecks.csproj
+      - name: Parse PowerShell scripts
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count) { throw "$($_.Name): $parseErrors" }
+          }

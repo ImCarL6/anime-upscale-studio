@@ -1,0 +1,187 @@
+[
+  {
+    "Path": "2x_AnimeJaNai_HD_V3_ModelsOnly\\2x_AnimeJaNai_HD_V3_Compact_strong_fp16.onnx",
+    "Bytes": 1211924,
+    "SHA256": "56FDF53F05AD2822464CA264DB934620951FF17488470E151CC008A2BF40FEFC"
+  },
+  {
+    "Path": "2x_AnimeJaNai_HD_V3_ModelsOnly\\2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16.onnx",
+    "Bytes": 1971970,
+    "SHA256": "B308E93C3DDA3C4F9F968295B2B7B8D1C0583A711BCA53A08D51134D9D1CBD5C"
+  },
+  {
+    "Path": "2x_AnimeJaNai_HD_V3_ModelsOnly\\2x_AnimeJaNai_HD_V3.1_Performance_SPANF3_b5f48_unshuffle_fp16.onnx",
+    "Bytes": 740318,
+    "SHA256": "7B804D87320F37B7269D6E27796046FBD975E95E2AA1F65D5557F52A36282716"
+  },
+  {
+    "Path": "2x_AnimeJaNai_HD_V3_ModelsOnly\\2x_AnimeJaNai_HD_V3.1Sharp1_Balanced_SPANF3_b8f64_unshuffle_fp16.onnx",
+    "Bytes": 1971970,
+    "SHA256": "DDE763C8202CFEBAC5EC030EA6644F3EE339EA35BBDA8A76E257405399552F0F"
+  },
+  {
+    "Path": "2x_AnimeJaNai_HD_V3_ModelsOnly\\2x_AnimeJaNai_HD_V3.1Sharp1_Performance_SPANF3_b5f48_unshuffle_fp16.onnx",
+    "Bytes": 740318,
+    "SHA256": "72246EDED3AAB52F8D1A71613C0A1D900734B358D1820B62EB36F1ED376E1CF4"
+  },
+  {
+    "Path": "2x_AnimeJaNai_HD_V3_ModelsOnly\\2x_AnimeJaNai_HD_V3Sharp1_Compact_strong_fp16.onnx",
+    "Bytes": 1211924,
+    "SHA256": "7E8CDEC4FFA9AF4E923FE7CF1C1A654D97FBD46A2A5DCB440CA6AD26819BB704"
+  },
+  {
+    "Path": "licenses\\Anime4K-LICENSE",
+    "Bytes": 1063,
+    "SHA256": "5BAD448B737378E3D0C977AD0D0521FA37AD279A7E76EA9A31D9257EEB6953F5"
+  },
+  {
+    "Path": "licenses\\CUDA-EULA.html",
+    "Bytes": 103088,
+    "SHA256": "4CA6D63C2C37F7186426FF9D1E018A1AC8A756361BE8B0C965EB8B4690ABF646"
+  },
+  {
+    "Path": "licenses\\FFmpeg-GPLv3.txt",
+    "Bytes": 35147,
+    "SHA256": "8CEB4B9EE5ADEDDE47B31E975C1D90C73AD27B6B165A1DCD80C7C545EB65B903"
+  },
+  {
+    "Path": "licenses\\SOURCES.txt",
+    "Bytes": 1189,
+    "SHA256": "8FCAD35AACC47979EB7179DD97ABADD87EC81BFAEA77EB5AC2BEADD79137E659"
+  },
+  {
+    "Path": "tools\\ffmpeg\\ffmpeg.exe",
+    "Bytes": 243156480,
+    "SHA256": "74EFE78BDD524F3E14B0C30C46752D5B44CFD9AF4D3D71DEC6C3EE993888A9D5"
+  },
+  {
+    "Path": "tools\\ffmpeg\\ffprobe.exe",
+    "Bytes": 242952704,
+    "SHA256": "E1ED5532730ADAD9D5C300D857FB80345DF9F90C4CA9B5344C7F756D6148C9FE"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\aji_dml.dll",
+    "Bytes": 195072,
+    "SHA256": "FC4A4643A604B9AC42291B0A1B0E6994432BBCAE995C54EF786C64B1AF32D04B"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\aji_encode.exe",
+    "Bytes": 109056,
+    "SHA256": "051B82DB514022B5A37DA5D7E08BCB85E3E2176CF17E0EEB51936F9D7264D48D"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\aji_harness_dml.exe",
+    "Bytes": 22528,
+    "SHA256": "937BFAFE7047CC2213F495EFFE9E919BE7D25048FCFBF5F2C8222C715C8DAC08"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\aji_harness.exe",
+    "Bytes": 36864,
+    "SHA256": "3F9A8E2D27A1F5D043DD65F01FDA64A69BD0D1CFE8C95F5A89A3FDA524FD9347"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\aji_kernel_test.exe",
+    "Bytes": 881152,
+    "SHA256": "28AD9FBBAC9ACDC9013CC942E4C62B0E4ADDCD66F35A657C67F07F47D1018B3C"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\aji_trt.dll",
+    "Bytes": 1102336,
+    "SHA256": "E8E80FEB9288878DA8BB6342DCFD7D1B0825ACD661B71ED41F1E26FDE3A499A9"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\aji.dll",
+    "Bytes": 94208,
+    "SHA256": "3C19545B3AA5E6D5C76A9B360D62D2A4DBD6E49FE71AF85ADDF4976BC8613CF1"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\avcodec-62.dll",
+    "Bytes": 97333248,
+    "SHA256": "86818846A9A74420F5F65FD8EBE0897BC9141E84E9C91F0F8B7607EE193A26D7"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\avdevice-62.dll",
+    "Bytes": 6198784,
+    "SHA256": "1AF517A1A3E9166909562491B5E1775280C1A54BC56E7CCEA1011E4E56AB1B59"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\avfilter-11.dll",
+    "Bytes": 109569536,
+    "SHA256": "F7E8DDC1E728DD72660DD79985ECBF1E664F7DC978BDC0382DB505B347C3D3CA"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\avformat-62.dll",
+    "Bytes": 19865600,
+    "SHA256": "4D0A70445D5139B713596A677A9DCAC64DC8F7C27053E9DBD0998E2CBDBEF611"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\avutil-60.dll",
+    "Bytes": 3139072,
+    "SHA256": "A98D20DF601B48D85D701C8A92B83C67E088CEAC34EBE434673DEFD15448CA9D"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\cudart64_13.dll",
+    "Bytes": 555120,
+    "SHA256": "CAC649F5D659F89713EBC5D426573CA7CF873D57AF7E40767B068FE3606120DB"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\msvcp140.dll",
+    "Bytes": 557416,
+    "SHA256": "D448DCABDAD98C14ABC6FF2741DF95CD43F7241A33DDD7D7A2857E4FD4D67777"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\nvinfer_11.dll",
+    "Bytes": 375759984,
+    "SHA256": "6A5B087AEA7209E5368E12494CAA7E86BB58666E8A25E4EDF533C483A576E005"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\nvinfer_builder_resource_sm120_11.dll",
+    "Bytes": 262534256,
+    "SHA256": "548F80DC63A38A9F60E1A29E8268353861306CB02EC22CB04BEE3BEA4D5B29A2"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\nvinfer_builder_resource_sm89_11.dll",
+    "Bytes": 185166448,
+    "SHA256": "230EBBC1007544D45EFAA41B3FA15366BBCDA354B79AE806DCCF5ACFA7467D0B"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\nvinfer_plugin_11.dll",
+    "Bytes": 47074928,
+    "SHA256": "77C2B37AA4929D18AA887FB97E46E96D3DB9916F3551757AF29A7D5EF553FB75"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\nvonnxparser_11.dll",
+    "Bytes": 2248816,
+    "SHA256": "52A104B50281614272132B6678F89FCABBCB79205F1B2C0997FB11BFEAE25418"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\swresample-6.dll",
+    "Bytes": 484864,
+    "SHA256": "6C5DD36848986C9ABE4F3ED215329DCCAFA4481D9E485655B900076B3E40BDC0"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\swscale-9.dll",
+    "Bytes": 12651520,
+    "SHA256": "BD1DB88D009D89F212723B99C20FAF53F0055E7ECB14B9580B3CB28F47453968"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\THIRD_PARTY_NOTICES.txt",
+    "Bytes": 960,
+    "SHA256": "E2CA7DAD1CDCC66752D529497DDF39C0F1C6B2F6174EE48EE3ECAEC60D092B94"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\trtexec.exe",
+    "Bytes": 1350656,
+    "SHA256": "2F980864E6269A8838B38122078E9B69143A10F2BBF803276F9900186A64F2D1"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\vcruntime140_1.dll",
+    "Bytes": 49520,
+    "SHA256": "1589EEF3CD99DDEACB3E12B271898AAE89941A3F927C2883C2C092727CFA8A94"
+  },
+  {
+    "Path": "tools\\videojanai\\inference\\vcruntime140.dll",
+    "Bytes": 124272,
+    "SHA256": "B7C0B68069300CF34FE7F1257B2142EE39083C4A2BAEEC697AE98FDCFDB192D7"
+  }
+]

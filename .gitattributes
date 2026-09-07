@@ -1,0 +1,10 @@
+* text=auto
+*.cs text eol=crlf
+*.ps1 text eol=crlf
+*.md text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.glsl text eol=lf
+*.ico binary
+# Keep upstream shader formatting intact.
+shaders/** -whitespace
