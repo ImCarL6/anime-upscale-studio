@@ -2,6 +2,11 @@
 
 ## Próxima versão
 
+- Explica a preparação inicial do TensorRT em um aviso visível com indicador de atividade; informa que pode levar minutos, permite cancelar e reutiliza engines compatíveis.
+- Permite reordenar a fila por arraste na alça de cada episódio antes de iniciar; a ordem visual corresponde à ordem da coleção processada.
+- Adiciona ações por episódio para abrir o vídeo final e selecionar o arquivo na pasta, habilitadas somente após conclusão bem-sucedida.
+- Gera automaticamente comparações do piloto com o mesmo frame de cada trecho: original ampliado sem IA versus resultado, divisória deslizante, zoom e alternância de trechos. Persiste as imagens para reabrir depois e mantém sua geração fora do cronômetro de desempenho.
+
 - Organiza o repositório público com fontes, shaders, CI, documentação e manifesto de dependências, excluindo mídia, dados locais e binários pesados.
 - Integra Velopack 1.2.0: consulta releases estáveis ao abrir e a cada seis horas, exibe changelog, baixa sob comando e solicita confirmação para reiniciar.
 - Bloqueia atualização durante fila/piloto e evita múltiplas instâncias; mantém dados e engines fora da pasta instalada, com namespace por runtime para preservar caches em updates só do app.

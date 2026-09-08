@@ -729,6 +729,7 @@ public partial class MainWindow : Window
         SetRunningUi(true);
         PilotSummaryPanel.Visibility = Visibility.Visible;
         OpenPilotButton.IsEnabled = false;
+        ComparePilotButton.IsEnabled = false;
         PilotSummaryText.Text = $"Medindo {target.FileName} com {settings.ProfileName} em CQ {settings.Cq}…";
         RefreshOverall();
 
@@ -813,9 +814,7 @@ public partial class MainWindow : Window
                 if (!File.Exists(modelPath)) throw new FileNotFoundException("Modelo AnimeJaNai não encontrado.", modelPath);
                 configPath = WriteAnimeJanaiConfig(workDirectory, settings.ModelName);
                 preparedPaths.Add(configPath);
-                var buildArguments = BuildAnimeJanaiEngineArguments(pilotSourcePath, configPath);
-                pilotItem.Stage = "Preparando engine TensorRT (fora da medição)";
-                await RunAjiAsync(pilotItem, buildArguments, 20, 10, logPath, cancellationToken);
+                await PrepareTensorRtAsync(pilotItem, pilotSourcePath, configPath, 20, 10, logPath, cancellationToken);
                 coreProgressStart = 30;
             }
 
@@ -876,6 +875,17 @@ public partial class MainWindow : Window
                 target.Duration.TotalSeconds,
                 target.EstimatedAudioOutputBitRate);
             var signature = BuildPilotSignature(target, settings.Engine, settings.ProfileCode, settings.Cq, settings.IsBeta, EffectiveBetaSignature(settings));
+            PilotComparisonResult? comparison = null;
+            try
+            {
+                pilotItem.Stage = "Gerando comparação visual dos mesmos quadros";
+                comparison = await CreatePilotComparisonAsync(pilotSourcePath, previewPath, samples, source.AverageFrameRate,
+                    settings.Engine == "animejanai" ? checked(source.Width * 2) : 3840,
+                    settings.Engine == "animejanai" ? checked(source.Height * 2) : 2160,
+                    settings.ProfileName, logPath, cancellationToken);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { AppendLog(logPath, $"\nComparação visual indisponível; medição do piloto preservada.\n{ex}\n"); }
             var result = new PilotRunResult(
                 PilotPipelineVersion,
                 signature,
@@ -900,7 +910,8 @@ public partial class MainWindow : Window
                 metrics.MaximumProjectedSeconds,
                 previewPath,
                 logPath,
-                DateTimeOffset.Now);
+                DateTimeOffset.Now,
+                comparison);
             File.WriteAllText(reportPath, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
             AppendLog(logPath, $"\nPiloto validado.\nRelatório={reportPath}\nAmostra={previewPath}\n{BuildPilotSummary(result)}\n");
 
@@ -913,7 +924,9 @@ public partial class MainWindow : Window
             OpenPilotButton.IsEnabled = true;
             ShowPilotResult(result);
             UpdateEstimates();
-            if (!SuppressInteractivePilotDialogs())
+            if (!SuppressInteractivePilotDialogs() && HasComparison(result))
+                OpenPilotComparison();
+            else if (!SuppressInteractivePilotDialogs())
                 MessageBox.Show(
                     BuildPilotSummary(result) + "\n\nA amostra AV1 foi validada e pode ser aberta para inspeção visual.",
                     "Piloto concluído",
@@ -1224,7 +1237,7 @@ public partial class MainWindow : Window
         Directory.CreateDirectory(workDirectory);
         var configPath = WriteAnimeJanaiConfig(workDirectory, settings.ModelName);
         await Dispatcher.InvokeAsync(() => { item.Status = "Preparando"; item.Stage = "Engine TensorRT e fingerprint"; });
-        await RunAjiAsync(item, BuildAnimeJanaiEngineArguments(item.InputPath, configPath), 0, 0.5, logPath, cancellationToken);
+        await PrepareTensorRtAsync(item, item.InputPath, configPath, 0, 0.5, logPath, cancellationToken);
         var toolchain = await ComputeToolchainSnapshotAsync(settings, cancellationToken);
         var cacheDirectory = Path.Combine(workDirectory, "toolchain-" + toolchain.Hash[..16].ToLowerInvariant());
         Directory.CreateDirectory(cacheDirectory);
@@ -1572,6 +1585,7 @@ public partial class MainWindow : Window
             """;
         File.WriteAllText(configPath, config, new UTF8Encoding(false));
 
+        await PrepareTensorRtAsync(item, item.InputPath, configPath, 0, 0.5, logPath, cancellationToken);
         var pipeName = "animejanai-" + Guid.NewGuid().ToString("N") + ".mkv";
         var pipePath = @"\\.\pipe\" + pipeName;
         await using var pipeServer = new NamedPipeServerStream(
@@ -3195,6 +3209,8 @@ public partial class MainWindow : Window
         PilotSummaryText.Text = BuildPilotSummary(result);
         PilotSummaryPanel.Visibility = Visibility.Visible;
         OpenPilotButton.IsEnabled = File.Exists(result.PreviewPath);
+        ComparePilotButton.IsEnabled = HasComparison(result);
+        ComparePilotButton.ToolTip = HasComparison(result) ? "Comparar os mesmos quadros com divisória e zoom" : "Execute um novo piloto para gerar a comparação";
     }
 
     private static string FormatDuration(TimeSpan duration)
@@ -3382,7 +3398,8 @@ public sealed record PilotRunResult(
     double MaximumProjectedSeconds,
     string PreviewPath,
     string LogPath,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    PilotComparisonResult? Comparison = null);
 public sealed record FileHashCacheEntry(
     string Path,
     long Length,
@@ -3562,7 +3579,9 @@ public sealed class EncodeItem : INotifyPropertyChanged
 {
     public string InputPath { get; }
     public string FileName => Path.GetFileName(InputPath);
-    public string OutputPath { get; set; } = "";
+    private string _outputPath = "";
+    public string OutputPath { get => _outputPath; set { _outputPath = value; Notify(); Notify(nameof(CanOpenOutput)); } }
+    public bool CanOpenOutput => Status == "Concluído" && !IsRunning && !string.IsNullOrWhiteSpace(OutputPath);
     public string Error { get; set; } = "";
     public string LogPath { get; set; } = "";
     public long InputBytes { get; private set; }
@@ -3596,11 +3615,11 @@ public sealed class EncodeItem : INotifyPropertyChanged
     public TimeSpan Duration { get => _duration; set { _duration = value; Notify(); Notify(nameof(DurationText)); } }
     public TimeSpan Processed { get => _processed; set { _processed = value; Notify(); } }
     public double Progress { get => _progress; set { _progress = value; Notify(); Notify(nameof(ProgressText)); Notify(nameof(EtaText)); } }
-    public string Status { get => _status; set { _status = value; Notify(); } }
+    public string Status { get => _status; set { _status = value; Notify(); Notify(nameof(CanOpenOutput)); } }
     public string Stage { get => _stage; set { _stage = value; Notify(); Notify(nameof(ProgressText)); } }
     public string Speed { get => _speed; set { _speed = value; Notify(); Notify(nameof(ProgressText)); } }
     public string Compatibility { get => _compatibility; set { _compatibility = value; Notify(); } }
-    public bool IsRunning { get => _isRunning; set { _isRunning = value; Notify(); Notify(nameof(EtaText)); } }
+    public bool IsRunning { get => _isRunning; set { _isRunning = value; Notify(); Notify(nameof(EtaText)); Notify(nameof(CanOpenOutput)); } }
     public string DurationText => Duration == TimeSpan.Zero ? "—" : Duration.ToString(@"hh\:mm\:ss");
     public string ElapsedText => FormatElapsed(Elapsed);
     public string EstimatedSizeText => EstimatedOutputBytes <= 0 ? "—" : FormatBytesLocal(EstimatedOutputBytes);

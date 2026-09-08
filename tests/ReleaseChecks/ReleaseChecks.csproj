@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Anime4KEncoder/StoragePaths.cs" Link="StoragePaths.cs" />
+    <Compile Include="../../src/Anime4KEncoder/ComparisonPlanner.cs" Link="ComparisonPlanner.cs" />
   </ItemGroup>
 </Project>

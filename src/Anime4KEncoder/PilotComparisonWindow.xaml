@@ -1,0 +1,36 @@
+<Window x:Class="Anime4KEncoder.PilotComparisonWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Comparação do piloto" Width="1140" Height="780" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner" Background="#0D1420" Foreground="#EDF2FA">
+    <Grid Margin="20">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,12">
+            <TextBlock Text="Original e resultado, no mesmo quadro" FontSize="23" FontWeight="SemiBold"/>
+            <TextBlock x:Name="ProfileText" Foreground="#A9BED6" Margin="0,5,0,0"/>
+        </StackPanel>
+        <WrapPanel Grid.Row="1" Margin="0,0,0,12" VerticalAlignment="Center">
+            <TextBlock Text="Trecho" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <ComboBox x:Name="FrameSelector" Width="265" SelectionChanged="Frame_Changed" Margin="0,0,16,0"/>
+            <TextBlock Text="Zoom" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <ComboBox x:Name="ZoomSelector" Width="110" SelectedIndex="0" SelectionChanged="Zoom_Changed" Margin="0,0,16,0">
+                <ComboBoxItem Content="Ajustar"/><ComboBoxItem Content="2×"/><ComboBoxItem Content="4×"/>
+            </ComboBox>
+            <CheckBox x:Name="AutoCycle" Content="Alternar trechos automaticamente" Foreground="#EDF2FA" VerticalAlignment="Center" Checked="AutoCycle_Changed" Unchecked="AutoCycle_Changed"/>
+        </WrapPanel>
+        <ScrollViewer x:Name="Viewport" Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" SizeChanged="Viewport_SizeChanged" Background="#05080D">
+            <Viewbox x:Name="ImageView" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid x:Name="ImageCanvas">
+                    <Image x:Name="ProcessedImage" Stretch="Fill"/>
+                    <Image x:Name="OriginalImage" Stretch="Fill"/>
+                    <Border x:Name="Divider" Width="5" Background="#FFFFFF" HorizontalAlignment="Left" IsHitTestVisible="False"/>
+                </Grid>
+            </Viewbox>
+        </ScrollViewer>
+        <StackPanel Grid.Row="3" Margin="0,12,0,0">
+            <Grid><TextBlock Text="← Original (ampliado sem IA)" Foreground="#8CCBFF"/><TextBlock Text="Resultado →" HorizontalAlignment="Right" Foreground="#B9A6FF"/></Grid>
+            <Slider x:Name="WipeSlider" Minimum="0" Maximum="100" Value="50" ValueChanged="Wipe_Changed" Margin="0,7" ToolTip="Deslize para revelar o original ou o resultado"/>
+            <TextBlock Text="Arraste a divisória pelo controle acima. Com zoom, use as barras para examinar o mesmo detalhe nos dois lados." TextWrapping="Wrap" Foreground="#9CADC2" FontSize="12"/>
+        </StackPanel>
+    </Grid>
+</Window>

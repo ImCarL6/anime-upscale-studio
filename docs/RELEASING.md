@@ -5,8 +5,9 @@
 - SDK NuGet e CLI `vpk`: **1.2.0**, fixados juntos.
 - ID: `ImCarL6.AnimeUpscaleStudio`; EXE: `Anime4KEncoder.exe`.
 - Canal Windows: `win`; fonte: releases públicas estáveis deste repositório.
-- Versionamento semântico, crescente. O esqueleto inicial usa `0.1.0`; só criar
+- Versionamento semântico, crescente. A integração inicial gerou um candidato `0.1.0`; só criar
   tag/release correspondente depois de validar e aprovar os artefatos reais.
+  A versão atual do código está no csproj; candidatos locais não são releases publicadas.
 
 ## Gerar
 

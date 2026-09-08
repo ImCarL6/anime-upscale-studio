@@ -33,3 +33,15 @@ dotnet run --project tests/UpdateFeedChecks/UpdateFeedChecks.csproj -- artifacts
 
 Confere consulta, changelog, download, ausência de update para versão atual e
 rejeição de pacote corrompido. Não instala/aplica nem simula uma RTX 5070.
+
+## Fila e comparador
+
+`Test-QueueFeatures.ps1 -Package <pasta-completa>` verifica reordenação da coleção,
+bloqueio durante processamento e ações de saída somente após sucesso. Com
+`-PilotReport <pilot-report.json> -RenderPath <imagem.png>`, verifica o comparador
+usando imagens reais do piloto e renderiza sua interface para inspeção.
+
+`Test-PilotEndToEnd.ps1` também exige pares de comparação, tamanhos iguais e acesso
+pela interface. ReleaseChecks testa offsets não contíguos da origem, índices do
+piloto concatenado e amostras curtas/ímpares. As imagens são PNG RGB de inspeção;
+não são métricas de qualidade nem uma referência de apresentação HDR.

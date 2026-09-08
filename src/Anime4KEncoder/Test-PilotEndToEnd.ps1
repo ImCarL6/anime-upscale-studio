@@ -90,6 +90,17 @@ try {
         throw 'A interface não publicou o resultado e o acesso à amostra validada.'
     }
     if (-not (Test-Path -LiteralPath $result.PreviewPath)) { throw "Amostra não encontrada: $($result.PreviewPath)" }
+    if ($null -eq $result.Comparison -or $result.Comparison.Frames.Count -ne $result.SampleCount) { throw 'Comparação automática não foi gerada.' }
+    if (!$window.FindName('ComparePilotButton').IsEnabled) { throw 'Botão do comparador não foi habilitado.' }
+    foreach ($pair in $result.Comparison.Frames) {
+        foreach ($imagePath in @($pair.OriginalPath, $pair.ProcessedPath)) {
+            $stream = [IO.File]::OpenRead($imagePath)
+            try {
+                $decoder = [Windows.Media.Imaging.BitmapDecoder]::Create($stream,[Windows.Media.Imaging.BitmapCreateOptions]::None,[Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
+                if ($decoder.Frames[0].PixelWidth -ne $result.Comparison.Width -or $decoder.Frames[0].PixelHeight -ne $result.Comparison.Height) {throw 'Dimensões de comparação divergentes.'}
+            } finally { $stream.Dispose() }
+        }
+    }
     if ($result.SampleCount -lt 1 -or $result.SampleSeconds -le 0 -or $result.CoreElapsedSeconds -le 0 -or
         $result.VideoBitRate -le 0 -or $result.ProjectedBitRate -le 0 -or $result.ProjectedOutputBytes -le 0 -or $result.ProjectedSeconds -le 0) {
         throw 'O relatório do piloto contém métricas nulas ou inválidas.'
@@ -149,6 +160,7 @@ try {
     }
 
     Write-Output 'PILOT_END_TO_END=PASS'
+    Write-Output 'PILOT_COMPARISON=PASS'
     Write-Output "PROFILE=$($result.ProfileName)"
     Write-Output "SAMPLES=$($result.SampleCount)"
     Write-Output "SAMPLE_SECONDS=$($result.SampleSeconds.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture))"

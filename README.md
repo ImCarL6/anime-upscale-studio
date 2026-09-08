@@ -16,6 +16,18 @@ Anime4K gera 3840×2160. AnimeJaNai dobra a resolução: 720p→1440p, 1080p→4
 Comece com o piloto de 15 segundos em V3.1 Balanced. Compact FP16 é experimental.
 A primeira execução pode levar minutos preparando a engine na sua GPU.
 
+## Fila e inspeção visual
+
+- Um aviso explica a preparação do TensorRT enquanto ela acontece, inclusive
+  quando a porcentagem permanece parada no primeiro uso.
+- Arraste pela alça `⋮⋮` de cada episódio para ordenar a fila antes de iniciar.
+  A reordenação fica bloqueada durante fila/piloto.
+- Após sucesso, use `▶` para abrir o vídeo e `Pasta` para selecionar a saída no Explorer.
+- O piloto gera um par de imagens do centro de cada trecho e abre o comparador
+  automaticamente. Use a divisória, o zoom e a seleção/alternância dos trechos.
+  O botão **Comparar original e resultado** reabre as imagens salvas. Pilotos
+  antigos precisam ser executados novamente para gerar as comparações.
+
 ## Instalação e atualizações
 
 O empacotamento usa **Velopack 1.2.0**, com .NET autocontido. Quando houver uma
@@ -43,7 +55,7 @@ instalador completo, prepare as dependências descritas em
 [DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 ```powershell
-pwsh -File scripts/Build-Installer.ps1 -RuntimeSource 'D:\StudioRuntime' -Version 0.1.0
+pwsh -File scripts/Build-Installer.ps1 -RuntimeSource 'D:\StudioRuntime' -Version 0.1.1
 ```
 
 O script confere os hashes, compila, gera Setup/portable/pacotes Velopack e

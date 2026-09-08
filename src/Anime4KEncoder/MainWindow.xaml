@@ -63,6 +63,13 @@
             <StackPanel>
                 <TextBlock Text="Anime Upscale Studio" FontSize="30" FontWeight="SemiBold"/>
                 <TextBlock Text="Anime4K e AnimeJaNai • AV1 NVENC • NVIDIA RTX" Foreground="{StaticResource Muted}" FontSize="14" Margin="0,5,0,0"/>
+                <Border x:Name="TensorRtNotice" Visibility="Collapsed" Background="#24354D" CornerRadius="6" Padding="10" Margin="0,8,12,0" MaxWidth="660" HorizontalAlignment="Left">
+                    <StackPanel>
+                        <TextBlock Text="Preparando TensorRT para sua placa de vídeo" FontWeight="SemiBold" Foreground="#8CCBFF"/>
+                        <TextBlock x:Name="TensorRtNoticeText" TextWrapping="Wrap" Margin="0,4,0,6"/>
+                        <ProgressBar IsIndeterminate="True" Height="4"/>
+                    </StackPanel>
+                </Border>
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                     <Button x:Name="UpdatesButton" Content="Atualizações e novidades" Click="Updates_Click" Padding="10,5"/>
                     <TextBlock x:Name="UpdateStatusText" VerticalAlignment="Center" Foreground="{StaticResource Muted}" TextWrapping="Wrap" MaxWidth="450"/>
@@ -161,6 +168,7 @@
                                 <Button x:Name="OpenPilotButton" Content="Abrir amostra" HorizontalAlignment="Right" Padding="10,4" Margin="0" Click="OpenPilot_Click"/>
                             </Grid>
                             <TextBlock x:Name="PilotSummaryText" Foreground="#D7E9F8" TextWrapping="Wrap" FontSize="11" Margin="0,6,0,0"/>
+                            <Button x:Name="ComparePilotButton" Content="Comparar original e resultado" IsEnabled="False" Click="ComparePilot_Click" HorizontalAlignment="Left" Margin="0,7,0,0" Padding="10,4"/>
                             <TextBlock Text="Tempo com margem de ±15%; a preparação da engine é feita antes da medição." Foreground="#96AEC2" TextWrapping="Wrap" FontSize="10" Margin="0,5,0,0"/>
                         </StackPanel>
                     </Border>
@@ -173,7 +181,10 @@
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <Grid Grid.Row="0" Margin="16,13">
                     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBlock Text="Fila de episódios" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Fila de episódios" FontSize="17" FontWeight="SemiBold"/>
+                        <TextBlock Text="Arraste pelo ⋮⋮ para ordenar antes de iniciar a fila." Foreground="{StaticResource Muted}" FontSize="11"/>
+                    </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
                         <Button Content="Adicionar arquivos" Background="{StaticResource Accent}" Click="AddFiles_Click"/>
                         <Button Content="Remover selecionados" Click="RemoveSelected_Click"/>
@@ -181,10 +192,17 @@
                     </StackPanel>
                 </Grid>
                 <DataGrid x:Name="QueueGrid" Grid.Row="1" ItemsSource="{Binding Items}" AutoGenerateColumns="False" CanUserAddRows="False"
+                          CanUserSortColumns="False" AllowDrop="True" DragOver="QueueGrid_DragOver" Drop="QueueGrid_Drop"
                           HeadersVisibility="Column" GridLinesVisibility="Horizontal" SelectionMode="Extended" BorderThickness="0"
                           Background="#0E141F" Foreground="#EDF2FA" RowBackground="#0E141F" AlternatingRowBackground="#111A28"
                           HorizontalGridLinesBrush="#222E40" ColumnHeaderStyle="{StaticResource GridHeader}">
                     <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="" Width="30" CanUserResize="False">
+                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <TextBlock Text="⋮⋮" Cursor="SizeAll" FontSize="18" Padding="4" VerticalAlignment="Center"
+                                           ToolTip="Arraste para mudar a posição na fila" PreviewMouseLeftButtonDown="QueueHandle_MouseDown" PreviewMouseMove="QueueHandle_MouseMove"/>
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Arquivo" Binding="{Binding FileName}" Width="2.3*" IsReadOnly="True"/>
                         <DataGridTextColumn Header="Duração" Binding="{Binding DurationText}" Width="0.55*" IsReadOnly="True"/>
                         <DataGridTextColumn Header="Tempo decorrido" Binding="{Binding ElapsedText}" Width="0.82*" IsReadOnly="True"/>
@@ -210,6 +228,14 @@
                         </DataGridTemplateColumn>
                         <DataGridTextColumn Header="ETA" Binding="{Binding EtaText}" Width="0.65*" IsReadOnly="True"/>
                         <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="0.9*" IsReadOnly="True"/>
+                        <DataGridTemplateColumn Header="Resultado" Width="118" IsReadOnly="True">
+                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="▶" ToolTip="Abrir vídeo final" Padding="9,5" Margin="2" IsEnabled="{Binding CanOpenOutput}" Click="OpenOutput_Click"/>
+                                    <Button Content="Pasta" ToolTip="Mostrar o vídeo final na pasta" Padding="7,5" Margin="2" IsEnabled="{Binding CanOpenOutput}" Click="OpenOutputFolder_Click"/>
+                                </StackPanel>
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Jellyfin" Binding="{Binding Compatibility}" Width="0.95*" IsReadOnly="True"/>
                     </DataGrid.Columns>
                 </DataGrid>

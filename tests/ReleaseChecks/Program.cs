@@ -32,3 +32,10 @@ try { StoragePaths.ModelRoot(v2, persistent); throw new Exception("Missing manif
 catch (FileNotFoundException) { }
 Console.WriteLine("RELEASE_STORAGE=PASS: portable, installed, app-only update, runtime invalidation, retained history, missing manifest.");
 Console.WriteLine("Synthetic fixtures retained at: " + temporary);
+var frames = ComparisonPlanner.Build(new[] { (100L, 120L), (1000L, 119L), (2000L, 1L) });
+Check(frames[0].OriginalFrame == 160 && frames[0].PilotFrame == 60, "First sample alignment is wrong.");
+Check(frames[1].OriginalFrame == 1059 && frames[1].PilotFrame == 179, "Odd-sized sample alignment is wrong.");
+Check(frames[2].OriginalFrame == 2000 && frames[2].PilotFrame == 239, "Single-frame sample alignment is wrong.");
+try { ComparisonPlanner.Build(new[] { (0L, 0L) }); throw new Exception("Empty sample accepted."); }
+catch (ArgumentOutOfRangeException) { }
+Console.WriteLine("COMPARISON_FRAME_ALIGNMENT=PASS: noncontiguous original offsets, concatenated pilot, odd sizes, short sample.");
