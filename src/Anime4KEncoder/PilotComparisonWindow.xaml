@@ -1,7 +1,7 @@
 <Window x:Class="Anime4KEncoder.PilotComparisonWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Comparação do piloto" Width="1140" Height="780" MinWidth="760" MinHeight="520"
+        Title="Comparação do teste de qualidade" Width="1140" Height="780" MinWidth="760" MinHeight="520"
         WindowStartupLocation="CenterOwner" Background="#0D1420" Foreground="#EDF2FA">
     <Grid Margin="20">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -28,9 +28,9 @@
             </Viewbox>
         </ScrollViewer>
         <StackPanel Grid.Row="3" Margin="0,12,0,0">
-            <Grid><TextBlock Text="← Original (ampliado sem IA)" Foreground="#8CCBFF"/><TextBlock Text="Resultado →" HorizontalAlignment="Right" Foreground="#B9A6FF"/></Grid>
-            <Slider x:Name="WipeSlider" Minimum="0" Maximum="100" Value="50" ValueChanged="Wipe_Changed" Margin="0,7" ToolTip="Deslize para revelar o original ou o resultado"/>
-            <TextBlock Text="Arraste a divisória pelo controle acima. Com zoom, use as barras para examinar o mesmo detalhe nos dois lados." TextWrapping="Wrap" Foreground="#9CADC2" FontSize="12"/>
+            <Grid><TextBlock Text="← Mostrar mais ORIGINAL (sem IA)" Foreground="#8CCBFF"/><TextBlock Text="Mostrar mais RESULTADO (com IA) →" HorizontalAlignment="Right" Foreground="#B9A6FF"/></Grid>
+            <TextBlock x:Name="ComparisonStatusText" Margin="0,8,0,0" TextWrapping="Wrap" FontWeight="SemiBold"/><Slider x:Name="WipeSlider" Minimum="0" Maximum="100" Value="50" ValueChanged="Wipe_Changed" Margin="0,7" ToolTip="Deslize para revelar o original ou o resultado"/>
+            <TextBlock Text="Controle à esquerda: somente original. À direita: somente resultado. Na imagem dividida, o original fica à esquerda da linha e o resultado à direita." TextWrapping="Wrap" Foreground="#9CADC2" FontSize="12"/>
         </StackPanel>
     </Grid>
 </Window>

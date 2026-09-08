@@ -79,8 +79,6 @@
                 <StackPanel>
                     <TextBlock x:Name="ToolsStatusText" Text="Verificando ambiente…" Foreground="#F7C76A"/>
                     <CheckBox x:Name="AdvancedModeCheck" Content="Modo avançado" Foreground="#F7C76A" Margin="0,8,0,0" Click="AdvancedMode_Click"/>
-                    <CheckBox x:Name="BetaModeCheck" Content="Parâmetros beta" Foreground="#D99BFF" Margin="0,6,0,0" Click="BetaMode_Click"
-                              ToolTip="Ativa somente opções experimentais. O histórico e o aprendizado beta ficam separados do modo estável."/>
                 </StackPanel>
             </Border>
         </Grid>
@@ -140,31 +138,25 @@
                             <TextBlock Text="O ffmpeg.exe permanece fixo. No AnimeJaNai, o Modo avançado usa o fluxo contínuo e desativa a retomada por blocos." Foreground="#D5B979" FontSize="11" Margin="0,6,0,0"/>
                         </StackPanel>
                     </Border>
-                    <Border x:Name="BetaPanel" Visibility="Collapsed" Background="#21152B" BorderBrush="#74418F" BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,10,0,0">
+                    <Border x:Name="BetaPanel" Background="#21152B" BorderBrush="#74418F" BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,10,0,0">
                         <StackPanel>
-                            <TextBlock Text="Parâmetros experimentais beta" Foreground="#D99BFF" FontWeight="SemiBold"/>
+                            <TextBlock Text="Parâmetros opcionais" Foreground="#D99BFF" FontWeight="SemiBold"/>
                             <WrapPanel Margin="0,7,0,0">
-                                <CheckBox x:Name="BetaLookaheadCheck" Content="Lookahead 4" Foreground="#F0DFFF" Margin="0,0,14,5" Click="BetaOption_Click"
-                                          ToolTip="Aumenta o nível de análise antecipada do NVENC. Pode melhorar a distribuição de bits, mas aumenta uso da GPU e tempo de encode."/>
-                                <CheckBox x:Name="BetaAqStrengthCheck" Content="AQ strength 10" Foreground="#F0DFFF" Margin="0,0,14,5" Click="BetaOption_Click"
+                                <CheckBox x:Name="BetaAqStrengthCheck" IsChecked="True" Content="AQ strength 10" Foreground="#F0DFFF" Margin="0,0,14,5" Click="BetaOption_Click"
                                           ToolTip="Aumenta a força da alocação adaptativa espacial. Pode preservar detalhes em cenas difíceis, mas tende a aumentar o tamanho do arquivo."/>
-                                <CheckBox x:Name="BetaBAdaptCheck" Content="B-adapt" Foreground="#F0DFFF" Margin="0,0,14,5" Click="BetaOption_Click"
+                                <CheckBox x:Name="BetaBAdaptCheck" IsChecked="True" Content="B-adapt" Foreground="#F0DFFF" Margin="0,0,14,5" Click="BetaOption_Click"
                                           ToolTip="Permite ao encoder decidir melhor a estrutura de frames B. Pode melhorar eficiência, com pequeno custo de análise."/>
-                                <CheckBox x:Name="BetaBRefCheck" Content="B-frames como referência" Foreground="#F0DFFF" Margin="0,0,14,5" Click="BetaOption_Click"
-                                          ToolTip="Usa frames B como referência hierárquica. Pode melhorar compressão, mas deve ser validado no Jellyfin e no Fire TV."/>
-                                <CheckBox x:Name="BetaWeightedPredCheck" Content="Weighted prediction" Foreground="#F0DFFF" Margin="0,0,14,5" Click="BetaOption_Click"
-                                          ToolTip="Ativa predição ponderada. Pode ajudar em transições e mudanças de iluminação, com possível aumento de complexidade."/>
                             </WrapPanel>
-                            <TextBlock Text="Essas opções não alteram o modo estável. Cada combinação beta aprende separadamente." Foreground="#D5B979" FontSize="11" Margin="0,4,0,0"/>
+                            <TextBlock Text="Ativados por padrão. Desmarque os parâmetros que não quiser usar." Foreground="#D5B979" FontSize="11" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock x:Name="EstimateSummaryText" Text="Estimativa: aguardando arquivos" TextWrapping="Wrap" Foreground="#C7D1E0"/>
-                    <Border x:Name="PilotSummaryPanel" Visibility="Collapsed" Background="#15263A" BorderBrush="#3B6F9D" BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,10,0,0">
+                    <TextBlock Text="Use Testar um trecho para comparar 15 s de vídeo e estimar tempo e tamanho antes de processar tudo." TextWrapping="Wrap" Foreground="#A9BED6" FontSize="11" Margin="0,4,0,0"/><Border x:Name="PilotSummaryPanel" Visibility="Collapsed" Background="#15263A" BorderBrush="#3B6F9D" BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,10,0,0">
                         <StackPanel>
                             <Grid>
-                                <TextBlock Text="Piloto medido" Foreground="#8CCBFF" FontWeight="SemiBold"/>
+                                <TextBlock Text="Teste de qualidade" Foreground="#8CCBFF" FontWeight="SemiBold"/>
                                 <Button x:Name="OpenPilotButton" Content="Abrir amostra" HorizontalAlignment="Right" Padding="10,4" Margin="0" Click="OpenPilot_Click"/>
                             </Grid>
                             <TextBlock x:Name="PilotSummaryText" Foreground="#D7E9F8" TextWrapping="Wrap" FontSize="11" Margin="0,6,0,0"/>
@@ -252,8 +244,8 @@
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="22,0,0,0" VerticalAlignment="Center">
                     <Button x:Name="LogsButton" Content="Abrir logs" Click="OpenLogs_Click"/>
-                    <Button x:Name="PilotButton" Content="Executar piloto" Background="#315F86" FontWeight="SemiBold" Click="Pilot_Click"
-                            ToolTip="Mede três trechos de 5 segundos com o motor, perfil e CQ selecionados."/>
+                    <Button x:Name="PilotButton" Content="Testar um trecho" Background="#315F86" FontWeight="SemiBold" Click="Pilot_Click"
+                            ToolTip="Gera três trechos de 5 segundos para comparar a qualidade e estimar o tempo e o tamanho do episódio completo."/>
                     <Button x:Name="StartButton" Content="Iniciar fila" Background="{StaticResource Accent}" FontWeight="SemiBold" Click="Start_Click"/>
                     <Button x:Name="CancelButton" Content="Cancelar" IsEnabled="False" Click="Cancel_Click" Margin="0"/>
                 </StackPanel>

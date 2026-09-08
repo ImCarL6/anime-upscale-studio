@@ -2,6 +2,10 @@
 
 ## Próxima versão
 
+- Simplifica os parâmetros opcionais: AQ strength 10 e B-adapt visíveis e marcados por padrão; remove os controles indisponíveis.
+- Esclarece o comparador com indicação contínua do conteúdo e controle da esquerda (original) para a direita (resultado).
+- Renomeia a ação para “Testar um trecho” e explica a comparação de qualidade e as estimativas antes do episódio completo.
+
 - Explica a preparação inicial do TensorRT em um aviso visível com indicador de atividade; informa que pode levar minutos, permite cancelar e reutiliza engines compatíveis.
 - Permite reordenar a fila por arraste na alça de cada episódio antes de iniciar; a ordem visual corresponde à ordem da coleção processada.
 - Adiciona ações por episódio para abrir o vídeo final e selecionar o arquivo na pasta, habilitadas somente após conclusão bem-sucedida.

@@ -53,7 +53,7 @@ public partial class PilotComparisonWindow : Window
         {
             _cycle.Stop();
             OriginalImage.Source = ProcessedImage.Source = null;
-            ProfileText.Text = "Imagem indisponível. Execute um novo piloto. " + ex.Message;
+            ProfileText.Text = "Imagem indisponível. Execute um novo teste de qualidade. " + ex.Message;
         }
     }
 
@@ -61,7 +61,14 @@ public partial class PilotComparisonWindow : Window
     private void UpdateWipe()
     {
         if (OriginalImage is null || WipeSlider is null) return;
-        var split = _comparison.Width * WipeSlider.Value / 100;
+        var split = _comparison.Width * (1 - WipeSlider.Value / 100);
+        if (ComparisonStatusText is not null)
+            ComparisonStatusText.Text = WipeSlider.Value <= 0
+                ? "Você está vendo somente o ORIGINAL, ampliado sem IA."
+                : WipeSlider.Value >= 100
+                    ? "Você está vendo somente o RESULTADO, processado com IA."
+                    : $"Na imagem: ORIGINAL à esquerda ({100 - WipeSlider.Value:0}%) | RESULTADO à direita ({WipeSlider.Value:0}%).";
+        Divider.Visibility = WipeSlider.Value is > 0 and < 100 ? Visibility.Visible : Visibility.Hidden;
         OriginalImage.Clip = new RectangleGeometry(new Rect(0, 0, split, _comparison.Height));
         Divider.Margin = new Thickness(Math.Min(split, Math.Max(0, _comparison.Width - 5)), 0, 0, 0);
     }

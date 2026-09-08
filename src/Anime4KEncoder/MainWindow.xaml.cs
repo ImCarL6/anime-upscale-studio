@@ -66,15 +66,6 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = this;
-        BetaLookaheadCheck.IsEnabled = false;
-        BetaLookaheadCheck.Content = "Lookahead 4 (indisponível)";
-        BetaLookaheadCheck.ToolTip = "A build/driver atual do av1_nvenc aceita no máximo lookahead_level 3, que já é usado pelo modo estável.";
-        BetaBRefCheck.IsEnabled = false;
-        BetaBRefCheck.Content = "B-frames como referência (indisponível)";
-        BetaBRefCheck.ToolTip = "O av1_nvenc atual falhou ao inicializar com b_ref_mode hierarchical nesta GPU/driver.";
-        BetaWeightedPredCheck.IsEnabled = false;
-        BetaWeightedPredCheck.Content = "Weighted prediction (indisponível)";
-        BetaWeightedPredCheck.ToolTip = "O av1_nvenc atual informa que weighted prediction não é suportado para esta saída AV1.";
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _elapsedTimer.Tick += (_, _) =>
         {
@@ -144,7 +135,7 @@ public partial class MainWindow : Window
             _environmentReady = true;
             StartButton.IsEnabled = PilotButton.IsEnabled = true;
             ToolsStatusText.Text = "● NVIDIA AV1 e TensorRT disponíveis";
-            FooterText.Text = "Primeiro uso do AnimeJaNai: a engine será preparada para sua GPU. Comece pelo piloto de 15 segundos.";
+            FooterText.Text = "Primeiro uso do AnimeJaNai: a engine será preparada para sua GPU. Comece pelo botão Testar um trecho (15 segundos).";
         }
         catch (Exception ex)
         {
@@ -316,24 +307,12 @@ public partial class MainWindow : Window
         SchedulePilotCacheRefresh();
     }
 
-    private void BetaMode_Click(object sender, RoutedEventArgs e)
+    private void BetaOption_Click(object sender, RoutedEventArgs e)
     {
-        BetaPanel.Visibility = BetaModeCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         UpdateEstimates();
         UpdateAdvancedCommandPreview();
         SchedulePilotCacheRefresh();
     }
-
-    private void BetaOption_Click(object sender, RoutedEventArgs e)
-    {
-        if (BetaModeCheck.IsChecked == true)
-        {
-            UpdateEstimates();
-            UpdateAdvancedCommandPreview();
-            SchedulePilotCacheRefresh();
-        }
-    }
-
     private void AdvancedCommandText_Changed(object sender, TextChangedEventArgs e) { }
 
     private void UpdateAdvancedCommandPreview()
@@ -351,7 +330,7 @@ public partial class MainWindow : Window
             shaderPath = BuildCombinedShader(shaderPreset);
 
         var args = BuildFfmpegArguments("{INPUT}", "{OUTPUT}", cq, shaderPath);
-        args = ApplyBetaOptions(args, BetaModeCheck.IsChecked == true ? ReadBetaOptions() : new BetaFfmpegOptions());
+        args = ApplyBetaOptions(args, ReadBetaOptions());
         var generated = FormatCommand(_ffmpeg, args);
         if (string.IsNullOrWhiteSpace(AdvancedCommandText.Text) || AdvancedCommandText.Tag is not string currentGenerated || currentGenerated == AdvancedCommandText.Text)
             AdvancedCommandText.Text = generated;
@@ -359,12 +338,11 @@ public partial class MainWindow : Window
     }
 
     private BetaFfmpegOptions ReadBetaOptions() => new(
-        BetaLookaheadCheck.IsEnabled && BetaLookaheadCheck.IsChecked == true,
+        false,
         BetaAqStrengthCheck.IsChecked == true,
         BetaBAdaptCheck.IsChecked == true,
-        BetaBRefCheck.IsEnabled && BetaBRefCheck.IsChecked == true,
-        BetaWeightedPredCheck.IsEnabled && BetaWeightedPredCheck.IsChecked == true);
-
+        false,
+        false);
     private static string EffectiveBetaSignature(JobSettings settings) =>
         settings.IsBeta ? settings.BetaOptions?.Signature ?? "" : "";
 
@@ -385,7 +363,7 @@ public partial class MainWindow : Window
                 return false;
             shaderPath = BuildCombinedShader(shaderPreset);
         }
-        var betaOptions = BetaModeCheck.IsChecked == true ? ReadBetaOptions() : new BetaFfmpegOptions();
+        var betaOptions = ReadBetaOptions();
         settings = new JobSettings(
             engine.Code,
             profile.Code,
@@ -396,7 +374,7 @@ public partial class MainWindow : Window
             shaderPath,
             profile is AnimeJanaiPreset animeJanai ? animeJanai.ModelName : null,
             null,
-            BetaModeCheck.IsChecked == true,
+            ReadBetaOptions().AnyEnabled,
             betaOptions);
         return true;
     }
@@ -610,8 +588,8 @@ public partial class MainWindow : Window
             shaderPath,
             profile is AnimeJanaiPreset animeJanai ? animeJanai.ModelName : null,
             AdvancedModeCheck.IsChecked == true ? AdvancedCommandText.Text.Trim() : null,
-            BetaModeCheck.IsChecked == true,
-            BetaModeCheck.IsChecked == true ? ReadBetaOptions() : new BetaFfmpegOptions());
+            ReadBetaOptions().AnyEnabled,
+            ReadBetaOptions());
 
         var concurrency = engine.Code == "animejanai" ? 1 : ConcurrencyCombo.SelectedIndex + 1;
         _queueCancellation = new CancellationTokenSource();
@@ -654,14 +632,14 @@ public partial class MainWindow : Window
     {
         if (Items.Count == 0)
         {
-            MessageBox.Show("Adicione pelo menos um arquivo para medir o piloto.", "Piloto", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Adicione pelo menos um arquivo para medir o piloto.", "Teste de qualidade", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         if (AdvancedModeCheck.IsChecked == true)
         {
             MessageBox.Show(
                 "O piloto não é executado no Modo avançado, porque um comando arbitrário não pode ser recortado sem alterar seu significado. Desative o Modo avançado para medir o pipeline padrão.",
-                "Piloto indisponível",
+                "Teste de qualidade indisponível",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
             return;
@@ -689,7 +667,7 @@ public partial class MainWindow : Window
             shaderPath = BuildCombinedShader(shaderPreset);
         }
 
-        var betaOptions = BetaModeCheck.IsChecked == true ? ReadBetaOptions() : new BetaFfmpegOptions();
+        var betaOptions = ReadBetaOptions();
         var settings = new JobSettings(
             engine.Code,
             profile.Code,
@@ -700,7 +678,7 @@ public partial class MainWindow : Window
             shaderPath,
             profile is AnimeJanaiPreset animeJanai ? animeJanai.ModelName : null,
             null,
-            BetaModeCheck.IsChecked == true,
+            ReadBetaOptions().AnyEnabled,
             betaOptions);
 
         var jobId = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..6];
@@ -714,7 +692,7 @@ public partial class MainWindow : Window
         var pilotItem = new EncodeItem(target.InputPath)
         {
             IsRunning = true,
-            Status = "Preparando piloto",
+            Status = "Preparando teste de qualidade",
             Stage = "Inventário da entrada",
             StartedAt = DateTimeOffset.Now,
             LogPath = logPath
@@ -858,7 +836,7 @@ public partial class MainWindow : Window
             }
             coreStopwatch.Stop();
 
-            pilotItem.Stage = "Validando piloto";
+            pilotItem.Stage = "Validando teste de qualidade";
             pilotItem.Progress = 96;
             RefreshOverall();
             await ValidateVideoSegmentAsync(previewPartialPath, sampledFrames, cancellationToken,
@@ -920,7 +898,7 @@ public partial class MainWindow : Window
             _pilotHistory.Add(result);
             completedSuccessfully = true;
             pilotItem.Progress = 100;
-            pilotItem.Stage = "Piloto concluído e validado";
+            pilotItem.Stage = "Teste de qualidade concluído e validado";
             OpenPilotButton.IsEnabled = true;
             ShowPilotResult(result);
             UpdateEstimates();
@@ -929,20 +907,20 @@ public partial class MainWindow : Window
             else if (!SuppressInteractivePilotDialogs())
                 MessageBox.Show(
                     BuildPilotSummary(result) + "\n\nA amostra AV1 foi validada e pode ser aberta para inspeção visual.",
-                    "Piloto concluído",
+                    "Teste de qualidade concluído",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
         }
         catch (OperationCanceledException)
         {
-            PilotSummaryText.Text = "Piloto cancelado. Nenhuma projeção foi aplicada à fila.";
+            PilotSummaryText.Text = "Teste de qualidade cancelado. Nenhuma projeção foi aplicada à fila.";
         }
         catch (Exception ex)
         {
             AppendLog(logPath, $"\nERRO NO PILOTO\n{ex}\n");
-            PilotSummaryText.Text = "O piloto falhou e nenhuma projeção foi aplicada. Consulte o log para os detalhes.";
+            PilotSummaryText.Text = "O teste de qualidade falhou e nenhuma projeção foi aplicada. Consulte o log para os detalhes.";
             if (!SuppressInteractivePilotDialogs())
-                MessageBox.Show(FriendlyError(ex.Message) + $"\n\nLog: {logPath}", "Falha no piloto", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(FriendlyError(ex.Message) + $"\n\nLog: {logPath}", "Falha no teste de qualidade", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -2244,7 +2222,7 @@ public partial class MainWindow : Window
     {
         if (!IsInitialized || EngineCombo.SelectedItem is not EngineOption engine || ProfileCombo.SelectedItem is not IProcessingProfile profile) return;
         var cq = int.TryParse(CqText.Text, out var parsed) ? Math.Clamp(parsed, 0, 63) : 28;
-        var isBeta = BetaModeCheck.IsChecked == true;
+        var isBeta = ReadBetaOptions().AnyEnabled;
         var betaSignature = isBeta ? ReadBetaOptions().Signature : "";
         long total = 0;
         double totalSeconds = 0;
@@ -2289,8 +2267,8 @@ public partial class MainWindow : Window
         var averageConfidence = Items.Count > 0 ? confidenceTotal / Items.Count : 0;
         var confidenceText = averageConfidence >= 0.75 ? "alta" : averageConfidence >= 0.35 ? "em aprendizado" : "inicial";
         var modelText = pilotApplied
-            ? $"piloto medido aplicado; demais itens usam histórico {(isBeta ? "beta" : "estável")}; confiança {confidenceText}"
-            : sampleCount > 0 ? $"{(isBeta ? "beta" : "estável")}, {sampleCount} amostras; confiança {confidenceText}" : $"{(isBeta ? "beta" : "estável")}, aguardando primeiras execuções";
+            ? $"piloto medido aplicado; demais itens usam histórico {(isBeta ? "com opcionais" : "padrão")}; confiança {confidenceText}"
+            : sampleCount > 0 ? $"{(isBeta ? "com opcionais" : "padrão")}, {sampleCount} amostras; confiança {confidenceText}" : $"{(isBeta ? "com opcionais" : "padrão")}, aguardando primeiras execuções";
         var queueSeconds = totalSeconds / Math.Max(1, concurrency);
         EstimateSummaryText.Text = Items.Count == 0
             ? "Estimativa: aguardando arquivos"
@@ -2397,7 +2375,7 @@ public partial class MainWindow : Window
         {
             OverallProgress.Value = pilot.Progress;
             OverallPercentText.Text = $"{pilot.Progress:0.0}%";
-            OverallStatusText.Text = $"Piloto em execução • {pilot.ProgressText}";
+            OverallStatusText.Text = $"Teste de qualidade em execução • {pilot.ProgressText}";
             return;
         }
 
@@ -2434,7 +2412,6 @@ public partial class MainWindow : Window
         OutputDirectoryText.IsEnabled = !running;
         ConcurrencyCombo.IsEnabled = !running && EngineCombo.SelectedItem is EngineOption { Code: "anime4k" };
         AdvancedModeCheck.IsEnabled = !running;
-        BetaModeCheck.IsEnabled = !running;
         BetaPanel.IsEnabled = !running;
     }
 
@@ -3210,7 +3187,7 @@ public partial class MainWindow : Window
         PilotSummaryPanel.Visibility = Visibility.Visible;
         OpenPilotButton.IsEnabled = File.Exists(result.PreviewPath);
         ComparePilotButton.IsEnabled = HasComparison(result);
-        ComparePilotButton.ToolTip = HasComparison(result) ? "Comparar os mesmos quadros com divisória e zoom" : "Execute um novo piloto para gerar a comparação";
+        ComparePilotButton.ToolTip = HasComparison(result) ? "Comparar os mesmos quadros com divisória e zoom" : "Execute um novo teste de qualidade para gerar a comparação";
     }
 
     private static string FormatDuration(TimeSpan duration)
