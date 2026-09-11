@@ -743,7 +743,7 @@ public partial class MainWindow : Window
                 var arguments = BuildLosslessSourceSegmentArguments(
                     target.InputPath,
                     samplePath,
-                    sample.StartFrame / source.AverageFrameRate,
+                    sample.StartFrame,
                     sample.FrameCount,
                     source.PixelFormat);
                 pilotItem.Stage = $"Preparando amostra {index + 1}/{samples.Count}";
@@ -1284,11 +1284,10 @@ public partial class MainWindow : Window
                 });
 
                 var sourceDuration = TimeSpan.FromSeconds(segment.SourceFrameCount / source.AverageFrameRate);
-                var sourceStartSeconds = segment.SourceStartFrame / source.AverageFrameRate;
                 var sourceArgs = BuildLosslessSourceSegmentArguments(
                     item.InputPath,
                     sourcePartialPath,
-                    sourceStartSeconds,
+                    segment.SourceStartFrame,
                     segment.SourceFrameCount,
                     source.PixelFormat);
                 await RunFfmpegAsync(
@@ -2839,19 +2838,20 @@ public partial class MainWindow : Window
     private static List<string> BuildLosslessSourceSegmentArguments(
         string inputPath,
         string outputPath,
-        double startSeconds,
+        long startFrame,
         long frameCount,
         string sourcePixelFormat)
     {
         var tenBit = sourcePixelFormat.Contains("10", StringComparison.OrdinalIgnoreCase) ||
                      sourcePixelFormat.Contains("p010", StringComparison.OrdinalIgnoreCase);
+        var endFrame = checked(startFrame + frameCount);
         return
         [
             "-hide_banner", "-nostdin", "-y",
-            "-ss", startSeconds.ToString("0.#########", CultureInfo.InvariantCulture),
             "-i", inputPath,
             "-map", "0:v:0", "-frames:v", frameCount.ToString(CultureInfo.InvariantCulture),
-            "-an", "-sn", "-dn", "-map_metadata", "-1", "-map_chapters", "-1", "-vf", "setpts=PTS-STARTPTS",
+            "-an", "-sn", "-dn", "-map_metadata", "-1", "-map_chapters", "-1",
+            "-vf", $"trim=start_frame={startFrame}:end_frame={endFrame},setpts=PTS-STARTPTS",
             "-c:v", "hevc_nvenc", "-preset", "p7", "-tune", "lossless", "-rc", "constqp", "-qp", "0",
             "-pix_fmt", tenBit ? "p010le" : "yuv420p",
             "-fps_mode", "passthrough", "-avoid_negative_ts", "make_zero",

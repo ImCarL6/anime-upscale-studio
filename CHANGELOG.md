@@ -2,6 +2,8 @@
 
 ## Próxima versão
 
+- Corrige cortes segmentados no limite de frames: seleciona os trechos por índice exato, evitando perder um frame por arredondamento temporal em vídeos CFR fracionários como 23,976 fps.
+
 - Simplifica os parâmetros opcionais: AQ strength 10 e B-adapt visíveis e marcados por padrão; remove os controles indisponíveis.
 - Esclarece o comparador com indicação contínua do conteúdo e controle da esquerda (original) para a direita (resultado).
 - Renomeia a ação para “Testar um trecho” e explica a comparação de qualidade e as estimativas antes do episódio completo.

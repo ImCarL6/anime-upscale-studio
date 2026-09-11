@@ -235,7 +235,6 @@ for ($index = 0; $index -lt $segmentCount; $index++) {
     $prefix = $usefulStart - $sourceStart
     $sourceCount = $sourceEnd - $sourceStart
     $usefulCount = $usefulEnd - $usefulStart
-    $sourceStartSeconds = $sourceStart / $sourceInfo.FrameRate
     $sourceSegment = Join-Path $work ('source-{0:0000}.mkv' -f ($index + 1))
     $outputSegment = Join-Path $work ('segment-{0:0000}.mkv' -f ($index + 1))
     if (Test-Path -LiteralPath $outputSegment) {
@@ -248,8 +247,8 @@ for ($index = 0; $index -lt $segmentCount; $index++) {
         Remove-Item -LiteralPath $outputSegment -Force
     }
     Invoke-Process $ffmpeg @(
-        '-hide_banner','-nostdin','-y','-ss',($sourceStartSeconds.ToString('0.#########',[Globalization.CultureInfo]::InvariantCulture)),
-        '-i',$testSource,'-map','0:v:0','-frames:v',"$sourceCount",'-an','-sn','-dn','-map_metadata','-1','-map_chapters','-1','-vf','setpts=PTS-STARTPTS',
+        '-hide_banner','-nostdin','-y','-i',$testSource,'-map','0:v:0','-frames:v',"$sourceCount",'-an','-sn','-dn','-map_metadata','-1','-map_chapters','-1',
+        '-vf',"trim=start_frame=$($sourceStart):end_frame=$($sourceEnd),setpts=PTS-STARTPTS",
         '-c:v','hevc_nvenc','-preset','p7','-tune','lossless','-rc','constqp','-qp','0','-pix_fmt','yuv420p',
         '-fps_mode','passthrough','-avoid_negative_ts','make_zero',$sourceSegment) (Split-Path $ffmpeg) | Out-Null
     $prepared = Get-Structure $sourceSegment
