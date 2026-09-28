@@ -2,6 +2,8 @@
 
 ## Próxima versão
 
+- Corrige a leitura UTF-8 dos metadados e logs do FFprobe/FFmpeg: títulos com acentos permanecem intactos no remux e na validação final de legendas, evitando falha após processar todos os blocos.
+
 - Corrige cortes segmentados no limite de frames: seleciona os trechos por índice exato, evitando perder um frame por arredondamento temporal em vídeos CFR fracionários como 23,976 fps.
 
 - Simplifica os parâmetros opcionais: AQ strength 10 e B-adapt visíveis e marcados por padrão; remove os controles indisponíveis.
