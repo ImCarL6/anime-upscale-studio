@@ -1,5 +1,15 @@
 # Testes
 
+## Prévia local: segundo plano v2
+
+- `dotnet run --project tests/ResourceChecks/ResourceChecks.csproj`: CPU nativa 35%/50%, herança, remoção do limite artificial de memória, reserva, pressão transitória/sustentada e orçamento de duas retomadas.
+- `Test-BackgroundV2.ps1 -Package <prévia> -FixturePath <fixture-sintética>`: fila real, cadência, saída validada e limpeza após sucesso.
+- Acrescentar `-ForceRecovery`: interrompe apenas o Job Object da tentativa, simulando pressão sem esgotar memória; verifica espera mínima de 30s, retomada mais lenta e resultado final.
+- Acrescentar `-ForceRecovery -CancelRecovery`: cancela manualmente durante a espera e verifica ausência de retomada.
+- `-ProfileCode V3-Compact-Sharp1` verifica o perfil padrão com a mesma fixture sintética.
+
+Estas verificações não comprovam responsividade com episódio completo e navegador aberto.
+
 ## Limpeza e padrões de abertura (0.1.5)
 
 `ReleaseChecks` verifica remoção após sucesso, preservação em falha/cancelamento,

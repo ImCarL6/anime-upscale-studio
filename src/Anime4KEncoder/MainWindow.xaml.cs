@@ -21,7 +21,7 @@ namespace Anime4KEncoder;
 public partial class MainWindow : Window
 {
     private const int SegmentedPipelineVersion = 1;
-    private const int AnimeJanaiSegmentSeconds = 300;
+    private const int AnimeJanaiSegmentSeconds = 60;
     private const int AnimeJanaiOverlapFrames = 2;
     private const int PilotPipelineVersion = 1;
     private const int ToolchainFingerprintVersion = 1;
@@ -94,6 +94,7 @@ public partial class MainWindow : Window
         LoadFileHashCache();
         LoadPilotHistory();
         LoadProfiles();
+        InitializeResourceControls();
         ValidateEnvironment();
         Loaded += async (_, _) => await CheckPortableEnvironmentAsync();
         InitializeUpdates();
@@ -261,7 +262,7 @@ public partial class MainWindow : Window
             ProfileLabel.Text = "Preset / shader Anime4K";
             ProfileCombo.ItemsSource = _shaderPresets;
             ProfileCombo.SelectedIndex = 0;
-            ConcurrencyCombo.IsEnabled = _queueCancellation is null;
+            ConcurrencyCombo.IsEnabled = _queueCancellation is null && ReadResourcePercent() == 100;
             CompatibilitySummaryText.Text = "AV1 Main 10-bit, 4K, MKV e AAC 48 kHz. Legendas ASS podem exigir transcodificação.";
         }
 
@@ -369,13 +370,13 @@ public partial class MainWindow : Window
             profile.Code,
             profile.Name,
             cq,
-            engine.Code == "animejanai" ? 1 : ConcurrencyCombo.SelectedIndex + 1,
+            ReadConcurrency(),
             OutputDirectoryText.Text.Trim(),
             shaderPath,
             profile is AnimeJanaiPreset animeJanai ? animeJanai.ModelName : null,
             null,
             ReadBetaOptions().AnyEnabled,
-            betaOptions);
+            betaOptions) { ResourcePercent = ReadResourcePercent() };
         return true;
     }
 
@@ -405,7 +406,7 @@ public partial class MainWindow : Window
                 .Where(signature => !string.IsNullOrWhiteSpace(signature))
                 .ToHashSet(StringComparer.Ordinal);
             var candidates = _pilotHistory
-                .Where(result => baseSignatures.Contains(result.Signature) &&
+                .Where(result => result.ResourcePercent == settings.ResourcePercent && baseSignatures.Contains(result.Signature) &&
                                  !string.IsNullOrWhiteSpace(result.ToolchainFingerprint) &&
                                  File.Exists(result.PreviewPath))
                 .OrderByDescending(result => result.CreatedAt)
@@ -583,15 +584,15 @@ public partial class MainWindow : Window
             profile.Code,
             profile.Name,
             cq,
-            engine.Code == "animejanai" ? 1 : ConcurrencyCombo.SelectedIndex + 1,
+            ReadConcurrency(),
             OutputDirectoryText.Text.Trim(),
             shaderPath,
             profile is AnimeJanaiPreset animeJanai ? animeJanai.ModelName : null,
             AdvancedModeCheck.IsChecked == true ? AdvancedCommandText.Text.Trim() : null,
             ReadBetaOptions().AnyEnabled,
-            ReadBetaOptions());
+            ReadBetaOptions()) { ResourcePercent = ReadResourcePercent() };
 
-        var concurrency = engine.Code == "animejanai" ? 1 : ConcurrencyCombo.SelectedIndex + 1;
+        var concurrency = ReadConcurrency();
         _queueCancellation = new CancellationTokenSource();
         SetRunningUi(true);
         _queueStartedAt = DateTimeOffset.Now;
@@ -601,16 +602,30 @@ public partial class MainWindow : Window
 
         try
         {
-            await Task.WhenAll(pending.Select(async item =>
+            if (settings.ResourcePercent < 100)
             {
-                await gate.WaitAsync(_queueCancellation.Token);
-                try { await EncodeAsync(item, settings, _queueCancellation.Token); }
-                finally { gate.Release(); }
-            }));
+                foreach (var item in pending)
+                    await EncodeInBackgroundAsync(item, settings, _queueCancellation.Token);
+            }
+            else
+            {
+                await Task.WhenAll(pending.Select(async item =>
+                {
+                    await gate.WaitAsync(_queueCancellation.Token);
+                    try { await EncodeAsync(item, settings, _queueCancellation.Token); }
+                    finally { gate.Release(); }
+                }));
+            }
         }
         catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            ResourceStatusText.Text = ex.Message;
+            MessageBox.Show(ex.Message, "Proteção de recursos", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
         finally
         {
+            EndResourceProtection();
             _elapsedTimer.Stop();
             if (_queueStartedAt.HasValue) _queueElapsed = DateTimeOffset.Now - _queueStartedAt.Value;
             SetRunningUi(false);
@@ -679,7 +694,7 @@ public partial class MainWindow : Window
             profile is AnimeJanaiPreset animeJanai ? animeJanai.ModelName : null,
             null,
             ReadBetaOptions().AnyEnabled,
-            betaOptions);
+            betaOptions) { ResourcePercent = ReadResourcePercent() };
 
         var jobId = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..6];
         var safeBaseName = SafeBaseName(Path.GetFileNameWithoutExtension(target.InputPath), 70);
@@ -713,6 +728,7 @@ public partial class MainWindow : Window
 
         try
         {
+            BeginResourceProtection(settings.ResourcePercent);
             var cancellationToken = _queueCancellation.Token;
             Directory.CreateDirectory(workDirectory);
             var media = await ProbeMediaAsync(target.InputPath, cancellationToken);
@@ -889,12 +905,12 @@ public partial class MainWindow : Window
                 previewPath,
                 logPath,
                 DateTimeOffset.Now,
-                comparison);
+                comparison) { ResourcePercent = settings.ResourcePercent };
             File.WriteAllText(reportPath, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
             AppendLog(logPath, $"\nPiloto validado.\nRelatório={reportPath}\nAmostra={previewPath}\n{BuildPilotSummary(result)}\n");
 
             _lastPilotResult = result;
-            _pilotHistory.RemoveAll(existing => existing.Signature == result.Signature && existing.ToolchainFingerprint == result.ToolchainFingerprint);
+            _pilotHistory.RemoveAll(existing => existing.ResourcePercent == result.ResourcePercent && existing.Signature == result.Signature && existing.ToolchainFingerprint == result.ToolchainFingerprint);
             _pilotHistory.Add(result);
             completedSuccessfully = true;
             pilotItem.Progress = 100;
@@ -911,9 +927,9 @@ public partial class MainWindow : Window
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (ex is OperationCanceledException || _queueCancellation?.IsCancellationRequested == true)
         {
-            PilotSummaryText.Text = "Teste de qualidade cancelado. Nenhuma projeção foi aplicada à fila.";
+            PilotSummaryText.Text = _resourceProtection?.StopReason ?? "Teste de qualidade cancelado. Nenhuma projeção foi aplicada à fila.";
         }
         catch (Exception ex)
         {
@@ -924,6 +940,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            EndResourceProtection();
             if (completedSuccessfully)
             {
                 TryDelete(previewPartialPath);
@@ -1005,6 +1022,8 @@ public partial class MainWindow : Window
             : Path.Combine(destinationDirectory, ".anime-upscale-temp", jobId);
         var logPath = CreateLogPath(safeBaseName, jobId);
         item.LogPath = logPath;
+        if (_lastResourceSnapshot is { } resourceSnapshot && settings.ResourcePercent < 100)
+            AppendLog(logPath, $"\nSegundo plano v2: RAM livre={resourceSnapshot.AvailableRam}; compromisso livre={resourceSnapshot.AvailableCommit}; VRAM livre={string.Join(',', resourceSnapshot.Gpus.Select(gpu => gpu.Free))}; ritmo={(_backgroundRecovery ?? new BackgroundRecovery()).ReadRate(settings.ResourcePercent):0.###}x\n");
 
         if (File.Exists(finalPath))
         {
@@ -1061,7 +1080,7 @@ public partial class MainWindow : Window
                 settings.IsBeta,
                 EffectiveBetaSignature(settings),
                 useSegmentedAnimeJanai ? SegmentedPipelineVersion : 0,
-                useSegmentedAnimeJanai ? AnimeJanaiSegmentSeconds : 0));
+                useSegmentedAnimeJanai ? AnimeJanaiSegmentSeconds : 0) { ResourcePercent = settings.ResourcePercent });
 
             await Dispatcher.InvokeAsync(() =>
             {
@@ -1077,9 +1096,9 @@ public partial class MainWindow : Window
                 UpdateEstimates();
             });
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (ex is OperationCanceledException || cancellationToken.IsCancellationRequested)
         {
-            AppendLog(logPath, $"\n[{DateTime.Now:O}] Processamento cancelado; blocos concluídos preservados.\n");
+            AppendLog(logPath, $"\n[{DateTime.Now:O}] {_resourceProtection?.StopReason ?? "Processamento cancelado; blocos concluídos preservados."}\n");
             await Dispatcher.InvokeAsync(() =>
             {
                 item.Status = "Cancelado";
@@ -1089,6 +1108,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            _allocationFailed = BackgroundRecovery.AllocationFailure(ex.ToString());
             AppendLog(logPath, $"\nERRO FINAL\n{ex}\n");
             await Dispatcher.InvokeAsync(() =>
             {
@@ -1116,6 +1136,7 @@ public partial class MainWindow : Window
     {
         if (string.IsNullOrWhiteSpace(settings.ShaderPath)) throw new InvalidOperationException("O shader combinado não foi criado.");
         var args = BuildFfmpegArguments(item.InputPath, outputPath, settings.Cq, settings.ShaderPath);
+        ApplyBackgroundReadRate(args, settings);
         args = ApplyBetaOptions(args, settings.BetaOptions ?? new BetaFfmpegOptions());
         args = ApplyAdvancedFfmpegCommand(args, settings.AdvancedFfmpegCommand, item.InputPath, outputPath);
 
@@ -1239,6 +1260,8 @@ public partial class MainWindow : Window
         for (var index = 0; index < segments.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (settings.ResourcePercent < 100)
+                await WaitForResourceReserveAsync(cancellationToken, false);
             var segment = segments[index];
             var checkpoint = manifest.Segments[index];
             var completedPath = Path.Combine(cacheDirectory, SegmentFileName(segment.Index));
@@ -1270,6 +1293,7 @@ public partial class MainWindow : Window
                 catch (Exception ex)
                 {
                     AppendLog(logPath, $"\nBloco {index + 1} existente foi rejeitado e será refeito: {ex.Message}\n");
+                    cancellationToken.ThrowIfCancellationRequested();
                     TryDelete(completedPath);
                     checkpoint.Completed = false;
                 }
@@ -1403,6 +1427,13 @@ public partial class MainWindow : Window
             settings.Cq,
             segment.PrefixOverlapFrames,
             segment.UsefulFrameCount);
+        if (settings.ResourcePercent < 100)
+        {
+            var rate = (_backgroundRecovery ?? new BackgroundRecovery()).ReadRate(settings.ResourcePercent);
+            var inputIndex = ffmpegArgs.IndexOf("-i");
+            ffmpegArgs.InsertRange(inputIndex, ["-readrate", rate.ToString(CultureInfo.InvariantCulture), "-readrate_initial_burst", "0", "-readrate_catchup", rate.ToString(CultureInfo.InvariantCulture)]);
+            AppendLog(logPath, $"\nTeste segundo plano v2: leitura limitada a {rate:0.###}x, blocos de 60s.\n");
+        }
         ffmpegArgs = ApplyBetaOptions(ffmpegArgs, settings.BetaOptions ?? new BetaFfmpegOptions());
 
         var ajiInfo = CreateProcessInfo(_ajiEncode, ajiArgs, _inferenceDirectory);
@@ -1422,8 +1453,8 @@ public partial class MainWindow : Window
                 item.Status = "Processando";
                 item.Stage = $"AnimeJaNai bloco {segment.Index + 1}/{segmentCount}";
             });
-            ffmpegProcess.Start();
-            ajiProcess.Start();
+            StartWorker(ffmpegProcess);
+            StartWorker(ajiProcess);
 
             using var registration = cancellationToken.Register(() =>
             {
@@ -1432,7 +1463,7 @@ public partial class MainWindow : Window
             });
 
             var ajiOutputTask = ReadAnimeJanaiProgressAsync(ajiProcess, item, cancellationToken, $"AnimeJaNai bloco {segment.Index + 1}/{segmentCount}");
-            var ajiErrorTask = ajiProcess.StandardError.ReadToEndAsync(cancellationToken);
+            var ajiErrorTask = ReadBoundedOutputAsync(ajiProcess.StandardError, cancellationToken);
             var ffmpegProgressTask = ReadFfmpegPipeProgressAsync(
                 ffmpegProcess,
                 item,
@@ -1441,7 +1472,7 @@ public partial class MainWindow : Window
                 progressSpan,
                 $"AnimeJaNai bloco {segment.Index + 1}/{segmentCount}",
                 cancellationToken);
-            var ffmpegErrorTask = ffmpegProcess.StandardError.ReadToEndAsync(cancellationToken);
+            var ffmpegErrorTask = ReadBoundedOutputAsync(ffmpegProcess.StandardError, cancellationToken);
             var ajiExitTask = ajiProcess.WaitForExitAsync(cancellationToken);
             var first = await Task.WhenAny(connectionTask, ajiExitTask);
 
@@ -1594,6 +1625,7 @@ public partial class MainWindow : Window
         };
 
         var ffmpegArgs = BuildFfmpegArguments("pipe:0", outputPath, settings.Cq, null);
+        ApplyBackgroundReadRate(ffmpegArgs, settings);
         ffmpegArgs = ApplyBetaOptions(ffmpegArgs, settings.BetaOptions ?? new BetaFfmpegOptions());
         ffmpegArgs = ApplyAdvancedFfmpegCommand(ffmpegArgs, settings.AdvancedFfmpegCommand, "pipe:0", outputPath);
 
@@ -1611,8 +1643,8 @@ public partial class MainWindow : Window
         try
         {
             await Dispatcher.InvokeAsync(() => { item.Status = "Processando"; item.Stage = "AnimeJaNai + AV1 por pipe"; });
-            ffmpegProcess.Start();
-            ajiProcess.Start();
+            StartWorker(ffmpegProcess);
+            StartWorker(ajiProcess);
 
             using var registration = cancellationToken.Register(() =>
             {
@@ -1621,9 +1653,9 @@ public partial class MainWindow : Window
             });
 
             var ajiOutputTask = ReadAnimeJanaiProgressAsync(ajiProcess, item, cancellationToken);
-            var ajiErrorTask = ajiProcess.StandardError.ReadToEndAsync(cancellationToken);
+            var ajiErrorTask = ReadBoundedOutputAsync(ajiProcess.StandardError, cancellationToken);
             var ffmpegProgressTask = ReadFfmpegPipeProgressAsync(ffmpegProcess, item, cancellationToken);
-            var ffmpegErrorTask = ffmpegProcess.StandardError.ReadToEndAsync(cancellationToken);
+            var ffmpegErrorTask = ReadBoundedOutputAsync(ffmpegProcess.StandardError, cancellationToken);
             var ajiExitTask = ajiProcess.WaitForExitAsync(cancellationToken);
             var first = await Task.WhenAny(connectionTask, ajiExitTask);
 
@@ -1687,6 +1719,7 @@ public partial class MainWindow : Window
         while (await process.StandardOutput.ReadLineAsync(cancellationToken) is { } line)
         {
             output.AppendLine(line);
+            if (output.Length > 60000) output.Remove(0, output.Length - 60000);
             var percent = ParseAnimeJanaiPercent(line);
             if (percent.HasValue)
                 await Dispatcher.InvokeAsync(() =>
@@ -1757,7 +1790,7 @@ public partial class MainWindow : Window
             }
         };
 
-        process.Start();
+        StartWorker(process);
         process.BeginErrorReadLine();
         using var registration = cancellationToken.Register(() => KillProcess(process));
         while (await process.StandardOutput.ReadLineAsync(cancellationToken) is { } line)
@@ -1828,7 +1861,7 @@ public partial class MainWindow : Window
 
         process.OutputDataReceived += (_, e) => HandleLine(e.Data);
         process.ErrorDataReceived += (_, e) => HandleLine(e.Data);
-        process.Start();
+        StartWorker(process);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         using var registration = cancellationToken.Register(() => KillProcess(process));
@@ -1995,7 +2028,7 @@ public partial class MainWindow : Window
             };
             var psi = CreateProcessInfo(_ffmpeg, args, Path.GetDirectoryName(_ffmpeg)!);
             using var process = new Process { StartInfo = psi };
-            process.Start();
+            StartWorker(process);
             using var registration = cancellationToken.Register(() => KillProcess(process));
             var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
@@ -2021,7 +2054,9 @@ public partial class MainWindow : Window
             "-of", "json", path
         };
         var psi = CreateProcessInfo(_ffprobe, args, Path.GetDirectoryName(_ffprobe)!);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Não foi possível iniciar o FFprobe.");
+        using var process = new Process { StartInfo = psi };
+        StartWorker(process);
+        using var registration = cancellationToken.Register(() => KillProcess(process));
         var jsonTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
@@ -2085,7 +2120,9 @@ public partial class MainWindow : Window
             "-show_entries", "packet=size", "-of", "csv=p=0", path
         };
         var psi = CreateProcessInfo(_ffprobe, args, Path.GetDirectoryName(_ffprobe)!);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Não foi possível iniciar o FFprobe.");
+        using var process = new Process { StartInfo = psi };
+        StartWorker(process);
+        using var registration = cancellationToken.Register(() => KillProcess(process));
         var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
@@ -2111,7 +2148,9 @@ public partial class MainWindow : Window
             "chapter=start_time,end_time:chapter_tags=title",
             "-of", "json", path]);
         var psi = CreateProcessInfo(_ffprobe, args, Path.GetDirectoryName(_ffprobe)!);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Não foi possível iniciar o FFprobe.");
+        using var process = new Process { StartInfo = psi };
+        StartWorker(process);
+        using var registration = cancellationToken.Register(() => KillProcess(process));
         var jsonTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
@@ -2198,7 +2237,9 @@ public partial class MainWindow : Window
             "-show_entries", "packet=pts_time", "-of", "csv=p=0", path
         };
         var psi = CreateProcessInfo(_ffprobe, args, Path.GetDirectoryName(_ffprobe)!);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Não foi possível iniciar o FFprobe.");
+        using var process = new Process { StartInfo = psi };
+        StartWorker(process);
+        using var registration = cancellationToken.Register(() => KillProcess(process));
         var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
@@ -2238,7 +2279,7 @@ public partial class MainWindow : Window
         var sampleCount = 0;
         double confidenceTotal = 0;
         var pilotApplied = false;
-        var concurrency = engine.Code == "animejanai" ? 1 : ConcurrencyCombo.SelectedIndex + 1;
+        var concurrency = ReadConcurrency();
         var pipelineVersion = engine.Code == "animejanai" && AdvancedModeCheck.IsChecked != true
             ? SegmentedPipelineVersion
             : 0;
@@ -2246,7 +2287,7 @@ public partial class MainWindow : Window
         foreach (var item in Items)
         {
             var estimate = BuildAdaptiveEstimate(item, engine.Code, profile.Code, cq, concurrency, isBeta, betaSignature, pipelineVersion);
-            var matchingPilot = _lastPilotResult is { } candidate &&
+            var matchingPilot = _lastPilotResult is { } candidate && candidate.ResourcePercent == ReadResourcePercent() &&
                                 candidate.Signature == BuildPilotSignature(item, engine.Code, profile.Code, cq, isBeta, betaSignature) &&
                                 !string.IsNullOrWhiteSpace(_activeToolchainFingerprint) &&
                                 candidate.ToolchainFingerprint == _activeToolchainFingerprint
@@ -2282,7 +2323,7 @@ public partial class MainWindow : Window
         EstimateSummaryText.Text = Items.Count == 0
             ? "Estimativa: aguardando arquivos"
             : $"Saída aprox.: {FormatBytes(total)} • Tempo da fila: {FormatDuration(TimeSpan.FromSeconds(queueSeconds))} • Modelo: {modelText}";
-        if (_lastPilotResult is { } visiblePilot && Items.Any(item =>
+        if (_lastPilotResult is { } visiblePilot && visiblePilot.ResourcePercent == ReadResourcePercent() && Items.Any(item =>
                 visiblePilot.Signature == BuildPilotSignature(item, engine.Code, profile.Code, cq, isBeta, betaSignature)) &&
             !string.IsNullOrWhiteSpace(_activeToolchainFingerprint) &&
             visiblePilot.ToolchainFingerprint == _activeToolchainFingerprint)
@@ -2298,7 +2339,7 @@ public partial class MainWindow : Window
         lock (_historyLock) history = _history.ToList();
 
         var candidates = history
-            .Where(h => h.Engine == engine && h.IsBeta == isBeta && h.BetaSignature == betaSignature &&
+            .Where(h => h.ResourcePercent == ReadResourcePercent() && h.Engine == engine && h.IsBeta == isBeta && h.BetaSignature == betaSignature &&
                         (engine != "animejanai" || h.PipelineVersion == pipelineVersion) &&
                         h.DurationSeconds > 0 && h.ElapsedSeconds > 0 && h.OutputBytes > 0)
             .Select(h => new { Record = h, Distance = EstimateDistance(h, item, profile, cq, concurrency) })
@@ -2397,7 +2438,7 @@ public partial class MainWindow : Window
         var completed = Items.Count(i => i.Status == "Concluído");
         var running = Items.Count(i => i.IsRunning);
         var remainingSeconds = Items.Where(i => i.Status != "Concluído").Sum(i => i.RemainingEstimateSeconds);
-        var concurrency = EngineCombo.SelectedItem is EngineOption { Code: "anime4k" } ? ConcurrencyCombo.SelectedIndex + 1 : 1;
+        var concurrency = ReadConcurrency();
         var eta = TimeSpan.FromSeconds(Math.Max(0, remainingSeconds / Math.Max(1, concurrency)));
         var etaText = remainingSeconds > 0 ? FormatDuration(eta) : "—";
         var elapsedText = "";
@@ -2419,7 +2460,8 @@ public partial class MainWindow : Window
         ProfileCombo.IsEnabled = !running;
         CqText.IsEnabled = !running;
         OutputDirectoryText.IsEnabled = !running;
-        ConcurrencyCombo.IsEnabled = !running && EngineCombo.SelectedItem is EngineOption { Code: "anime4k" };
+        ConcurrencyCombo.IsEnabled = !running && ReadResourcePercent() == 100 && EngineCombo.SelectedItem is EngineOption { Code: "anime4k" };
+        ResourceModeCombo.IsEnabled = !running;
         AdvancedModeCheck.IsEnabled = !running;
         BetaPanel.IsEnabled = !running;
     }
@@ -3078,6 +3120,7 @@ public partial class MainWindow : Window
         return args;
     }
 
+
     private static List<string> ApplyBetaOptions(IReadOnlyList<string> source, BetaFfmpegOptions options)
     {
         var args = source.ToList();
@@ -3329,7 +3372,10 @@ public sealed record JobSettings(
     string? ModelName,
     string? AdvancedFfmpegCommand = null,
     bool IsBeta = false,
-    BetaFfmpegOptions? BetaOptions = null);
+    BetaFfmpegOptions? BetaOptions = null)
+{
+    public int ResourcePercent { get; init; } = 100;
+}
 public sealed record HistoryRecord(
     DateTimeOffset Timestamp,
     string Engine,
@@ -3350,7 +3396,10 @@ public sealed record HistoryRecord(
     bool IsBeta = false,
     string BetaSignature = "",
     int PipelineVersion = 0,
-    int SegmentSeconds = 0);
+    int SegmentSeconds = 0)
+{
+    public int ResourcePercent { get; init; } = 100;
+}
 public sealed record AdaptiveEstimate(long OutputBytes, double TotalSeconds, int SampleCount, double Confidence, string Basis);
 public sealed record PilotSamplePlan(int Index, long StartFrame, long FrameCount);
 public sealed record PilotProjection(
@@ -3386,7 +3435,10 @@ public sealed record PilotRunResult(
     string PreviewPath,
     string LogPath,
     DateTimeOffset CreatedAt,
-    PilotComparisonResult? Comparison = null);
+    PilotComparisonResult? Comparison = null)
+{
+    public int ResourcePercent { get; init; } = 100;
+}
 public sealed record FileHashCacheEntry(
     string Path,
     long Length,

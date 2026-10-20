@@ -2,6 +2,8 @@
 
 ## Próxima versão
 
+- TESTE LOCAL segundo plano v2: remove os gatilhos globais de 70%/80% e o limite rígido de memória que podia provocar falhas de alocação. CPU 35%/50%, GPU em prioridade baixa, cadência no pipe e blocos de 60 segundos. Aguarda reserva antes de iniciar cada bloco; pressão crítica sustentada encerra somente a tentativa. Retoma no máximo duas vezes com espera e ritmo progressivamente menor. Não publicado como versão estável.
+
 ## 0.1.5 — 2026-10-20
 
 - Remove a pasta temporária do trabalho somente após validar e salvar o vídeo final, incluindo os blocos recuperáveis do AnimeJaNai. Preserva trabalhos com falha ou cancelados e registra falhas de limpeza no log.
