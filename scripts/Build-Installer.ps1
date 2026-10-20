@@ -40,6 +40,7 @@ foreach ($entry in $manifest) {
 Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $stage 'runtime-manifest.json')
 Copy-Item -LiteralPath (Join-Path $root 'shaders') -Destination $stage -Recurse
 Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $stage
+Copy-Item -LiteralPath (Join-Path $root 'scripts\managed-licenses') -Destination (Join-Path $stage 'licenses\managed') -Recurse
 & $vpk pack --packId ImCarL6.AnimeUpscaleStudio --packVersion $Version --packDir $stage --mainExe Anime4KEncoder.exe --packTitle 'Anime Upscale Studio' --packAuthors ImCarL6 --icon (Join-Path $root 'src\Anime4KEncoder\painter.ico') --releaseNotes $ReleaseNotes --channel win --outputDir $OutputDirectory
 if ($LASTEXITCODE) { throw 'Falha no empacotamento Velopack.' }
 Get-ChildItem -LiteralPath $OutputDirectory -File | Where-Object Name -ne 'SHA256SUMS.txt' | ForEach-Object {

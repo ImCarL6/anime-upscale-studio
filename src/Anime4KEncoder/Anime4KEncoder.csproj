@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>painter.ico</ApplicationIcon>
     <StartupObject>Anime4KEncoder.App</StartupObject>
-    <Version>0.1.6-background.3</Version>
+    <Version>0.1.6</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 

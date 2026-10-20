@@ -55,3 +55,22 @@ Check(JobTemporaryFiles.Cleanup(successJob, true) is null, "Repeated cleanup fai
 Check(JobTemporaryFiles.Cleanup(failedJob, true) is null && !Directory.Exists(jobRoot), "Empty temporary parent was retained.");
 Check(JobTemporaryFiles.Cleanup(v1, true) is not null && Directory.Exists(v1), "Cleanup accepted a non-job directory.");
 Console.WriteLine("JOB_TEMPORARY_CLEANUP=PASS: success, failure/cancellation, sibling isolation, repeated cleanup, empty parent, path guard.");
+
+var timeline = new InputTimeline();
+timeline.Add("codec_type=video|pts_time=9|duration_time=1");
+timeline.Add("codec_type=audio|pts_time=9|duration_time=1");
+timeline.Add("codec_type=subtitle|pts_time=11|duration_time=4");
+timeline.Validate(15); // subtitles may legitimately extend beyond A/V
+try { timeline.Validate(240); throw new Exception("Missing tail accepted."); } catch (InvalidOperationException) { }
+try { InputTimeline.ValidateReader(0, "File ended prematurely"); throw new Exception("Successful exit hid truncation."); } catch (InvalidOperationException) { }
+InputTimeline.ValidateReader(0, "");
+Console.WriteLine("INPUT_INTEGRITY=PASS: successful exit with truncation rejected, duration mismatch rejected, extended subtitles accepted.");
+var sessionFile = Path.Combine(temporary, "session", "queue-session.json");
+SessionStore.Save(sessionFile, new QueueSession { OutputDirectory = "output á", InputDirectory = "input", ElapsedSeconds = 123,
+    Items = [new QueueEntry { InputPath = "épisode.mkv", Status = "Processando", Progress = 42 }] });
+SessionStore.Save(sessionFile, new QueueSession { OutputDirectory = "updated", ElapsedSeconds = 150 });
+Check(SessionStore.Load(sessionFile)!.ElapsedSeconds == 150, "Session latest state lost.");
+File.WriteAllText(sessionFile, "broken-json");
+var recovered = SessionStore.Load(sessionFile)!;
+Check(recovered.ElapsedSeconds == 123 && recovered.Items.Single().InputPath == "épisode.mkv", "Session backup recovery failed.");
+Console.WriteLine("QUEUE_SESSION=PASS: atomic replacement, accumulated time, paths, queue and corrupted-primary recovery.");

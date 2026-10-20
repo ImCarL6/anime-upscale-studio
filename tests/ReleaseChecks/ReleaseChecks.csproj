@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/Anime4KEncoder/InputIntegrity.cs" Link="InputIntegrity.cs" />
+    <Compile Include="../../src/Anime4KEncoder/SessionStore.cs" Link="SessionStore.cs" />
+    <Compile Include="../../src/Anime4KEncoder/MediaInfo.cs" Link="MediaInfo.cs" />
     <Compile Include="../../src/Anime4KEncoder/JobTemporaryFiles.cs" Link="JobTemporaryFiles.cs" />
     <Compile Include="../../src/Anime4KEncoder/StoragePaths.cs" Link="StoragePaths.cs" />
     <Compile Include="../../src/Anime4KEncoder/ComparisonPlanner.cs" Link="ComparisonPlanner.cs" />

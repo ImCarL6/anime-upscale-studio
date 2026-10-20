@@ -1,0 +1,19 @@
+Managed dependencies in Anime Upscale Studio 0.1.6
+
+NetMQ 4.0.4.4 — LGPL-3.0; distributed as a separate, replaceable DLL.
+Corresponding upstream source: https://github.com/zeromq/netmq/tree/eb5eaa573eff8d9aadbf2049b185aea5a60874b8
+Package: https://www.nuget.org/packages/NetMQ/4.0.4.4
+
+AsyncIO 0.1.69 — MPL-2.0; unmodified library.
+Source: https://github.com/somdoron/AsyncIO
+Package: https://www.nuget.org/packages/AsyncIO/0.1.69
+
+NaCl.Net 0.1.13 — MPL-2.0; unmodified library.
+Source: https://github.com/somdoron/NaCl.net
+Package: https://www.nuget.org/packages/NaCl.Net/0.1.13
+
+System.ServiceModel.Primitives — .NET Foundation/Microsoft MIT license; version pinned in packages.lock.json.
+Source: https://github.com/dotnet/wcf
+
+.NET runtime and platform library licenses are included by dotnet publish.
+No license is assigned here to the application's own source code.

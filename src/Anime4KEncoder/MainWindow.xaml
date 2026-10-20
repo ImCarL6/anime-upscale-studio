@@ -1,7 +1,7 @@
 <Window x:Class="Anime4KEncoder.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Anime Upscale Studio — TESTE controle ao vivo" Height="880" Width="1320" MinHeight="760" MinWidth="1080"
+        Title="Anime Upscale Studio" Height="880" Width="1320" MinHeight="760" MinWidth="1080"
         WindowStartupLocation="CenterScreen" Background="#090D15" Foreground="#EDF2FA">
     <Window.Resources>
         <SolidColorBrush x:Key="Panel" Color="#121927"/>
@@ -119,12 +119,14 @@
                 <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Margin="0,12,0,0">
                     <WrapPanel>
                         <TextBlock Text="Uso do PC" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                        <ComboBox x:Name="ResourceModeCombo" Width="240" SelectedIndex="0" SelectionChanged="ResourceMode_Changed"
+                        <ComboBox x:Name="ResourceModeCombo" Width="240" SelectedIndex="1" SelectionChanged="ResourceMode_Changed"
                                   ToolTip="Cadencia o AnimeJaNai por blocos e espera por reserva de memória. GPU em prioridade baixa; sem cota rígida de VRAM.">
-                            <ComboBoxItem Content="Trabalhar e assistir (padrão)"/>
-                            <ComboBoxItem Content="Equilibrado"/>
+                            <ComboBoxItem Content="Trabalhar e assistir"/>
+                            <ComboBoxItem Content="Equilibrado (padrão)"/>
                             <ComboBoxItem Content="Desempenho máximo"/>
                         </ComboBox>
+                        <Button x:Name="MaximumPerformanceButton" Content="⚡ Ativar desempenho máximo" Background="#886017" FontWeight="SemiBold" Margin="12,0,0,0" Click="MaximumPerformance_Click"
+                                ToolTip="Libera os limites de desempenho agora. A proteção de memória continua ativa."/>
                         <TextBlock Text="Troque durante o processamento: CPU e ritmo ao vivo. A proteção de memória permanece ativa." TextWrapping="Wrap"
                                    Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="12,0,0,0"/>
                     </WrapPanel>
@@ -137,7 +139,7 @@
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="0.85*"/></Grid.ColumnDefinitions>
                 <StackPanel Margin="0,0,20,0">
-                    <TextBlock Text="Perfil de reprodução: Jellyfin + Fire TV Stick 4K Max (2ª geração)" FontWeight="SemiBold" Foreground="#8FE0AE"/>
+                    <TextBlock Text="Saída: AV1 10-bit em MKV" FontWeight="SemiBold" Foreground="#8FE0AE"/>
                     <TextBlock x:Name="CompatibilitySummaryText" Text="AV1 Main 10-bit, 4K, MKV e AAC 48 kHz. Legendas ASS podem exigir transcodificação." Foreground="#B8C8BF" Margin="0,4,0,0"/>
                     <Border x:Name="LegacyProfileWarningPanel" Visibility="Collapsed" Background="#2C2312" BorderBrush="#B8893B" BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,10,0,0">
                         <StackPanel>
@@ -190,7 +192,7 @@
                     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Fila de episódios" FontSize="17" FontWeight="SemiBold"/>
-                        <TextBlock Text="Arraste pelo ⋮⋮ para ordenar antes de iniciar a fila." Foreground="{StaticResource Muted}" FontSize="11"/>
+                        <TextBlock Text="Adicione episódios mesmo durante o processamento. A fila é salva entre sessões." Foreground="{StaticResource Muted}" FontSize="11"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
                         <Button Content="Adicionar arquivos" Background="{StaticResource Accent}" Click="AddFiles_Click"/>
@@ -243,7 +245,7 @@
                                 </StackPanel>
                             </DataTemplate></DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Jellyfin" Binding="{Binding Compatibility}" Width="0.95*" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Compatibilidade" Binding="{Binding Compatibility}" Width="0.95*" IsReadOnly="True"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>
@@ -256,6 +258,7 @@
                     <Grid><TextBlock Text="Progresso total" FontWeight="SemiBold"/><TextBlock x:Name="OverallPercentText" Text="0%" HorizontalAlignment="Right"/></Grid>
                     <ProgressBar x:Name="OverallProgress" Margin="0,9,0,0" Maximum="100" Height="10"/>
                     <TextBlock x:Name="OverallStatusText" Text="Pronto para começar" Foreground="{StaticResource Muted}" Margin="0,7,0,0"/>
+                    <TextBlock x:Name="QueueElapsedText" Text="Tempo acumulado da fila: 00:00" Foreground="#8FE0AE" FontWeight="SemiBold" Margin="0,5,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="22,0,0,0" VerticalAlignment="Center">
                     <Button x:Name="LogsButton" Content="Abrir logs" Click="OpenLogs_Click"/>

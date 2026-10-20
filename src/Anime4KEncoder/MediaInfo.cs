@@ -1,0 +1,2 @@
+namespace Anime4KEncoder;
+public sealed record MediaInfo(TimeSpan Duration, long Size, long BitRate, string VideoCodec, string PixelFormat, int Width, int Height, bool HasAssSubtitle, IReadOnlyList<string> AudioCodecs, long EstimatedAudioOutputBitRate);

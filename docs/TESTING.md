@@ -1,6 +1,6 @@
 # Testes
 
-## Controle ao vivo (prévia 0.1.6-background.3)
+## Controle ao vivo (0.1.6)
 
 `ResourceChecks` recebe opcionalmente o caminho do FFmpeg: testa CPU 35→75→máximo→35
 no mesmo processo, emergência de memória ainda ativa em máximo, comandos de
@@ -12,13 +12,13 @@ corrigidas; o aplicativo WPF usa as dependências fornecidas pelo runtime deskto
 verifica seletor habilitado em processamento, confirma os três comandos no mesmo
 bloco/tentativa e exige validação final, limpeza e marcador de histórico misto.
 
-## Prévia local: segundo plano v2
+## Retomada e proteção
 
-- `dotnet run --project tests/ResourceChecks/ResourceChecks.csproj`: CPU nativa 35%/50%, herança, remoção do limite artificial de memória, reserva, pressão transitória/sustentada e orçamento de duas retomadas.
+- `dotnet run --project tests/ResourceChecks/ResourceChecks.csproj`: CPU nativa 35%/75%, herança, remoção do limite artificial de memória, reserva, pressão transitória/sustentada e orçamento de duas retomadas.
 - `Test-BackgroundV2.ps1 -Package <prévia> -FixturePath <fixture-sintética>`: fila real, cadência, saída validada e limpeza após sucesso.
 - Acrescentar `-ForceRecovery`: interrompe apenas o Job Object da tentativa, simulando pressão sem esgotar memória; verifica espera mínima de 30s, retomada mais lenta e resultado final.
 - Acrescentar `-ForceRecovery -CancelRecovery`: cancela manualmente durante a espera e verifica ausência de retomada.
-- `-ProfileCode V3-Compact-Sharp1` verifica o perfil padrão com a mesma fixture sintética.
+- `-ProfileCode V3-Compact-Sharp1` verifica o perfil Compact alternativo com a mesma fixture sintética.
 
 Estas verificações não comprovam responsividade com episódio completo e navegador aberto.
 
@@ -28,8 +28,19 @@ Estas verificações não comprovam responsividade com episódio completo e nave
 isolamento entre trabalhos, limpeza repetida, remoção do diretório pai vazio e
 rejeição de caminhos fora de `.anime-upscale-temp`.
 `dotnet run --project tests/DefaultsChecks/DefaultsChecks.csproj -- <runtime-completo>`
-instancia a janela WPF sem iniciar encoders e confere AnimeJaNai, Compact Sharp1 e CQ 18.
+instancia a janela WPF sem iniciar encoders e confere AnimeJaNai, V3.1 Balanced Sharp1, CQ 18 e modo Equilibrado.
 Isso não substitui uma conversão completa com validação final e limpeza em uso real.
+
+## Sessão e integridade
+
+`Test-SessionQueue.ps1 -Package <runtime-isolado> -FixturePath <mídia-sintética>`
+verifica inclusão durante a fila, processamento automático dos novos itens, recusa
+antecipada de arquivo truncado, restauração de ordem/estados/pastas/tempo e retorno
+de trabalho interrompido como pendente. Também aceita legendas que terminam depois
+do vídeo. Use uma distribuição isolada: o teste grava sua própria sessão sintética.
+
+`ReleaseChecks` cobre EOF prematuro com código de saída zero, duração inconsistente,
+legendas estendidas e recuperação do arquivo de sessão pela cópia de segurança.
 
 ## Sem GPU / CI
 

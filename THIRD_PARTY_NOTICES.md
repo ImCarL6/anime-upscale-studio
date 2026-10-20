@@ -12,10 +12,10 @@
 
 This software contains source code provided by NVIDIA Corporation.
 
-O teste de controle ao vivo usa NetMQ 4.0.4.4, distribuído em DLL separada:
+O controle de recursos ao vivo usa NetMQ 4.0.4.4, distribuído em DLL separada:
 https://github.com/zeromq/netmq — LGPLv3, conforme o arquivo
 COPYING.LESSER do projeto. Dependências gerenciadas são registradas em
-packages.lock.json; suas licenças acompanham os respectivos pacotes NuGet.
+packages.lock.json. AsyncIO 0.1.69 e NaCl.Net 0.1.13 usam MPL 2.0. As licenças e os endereços das fontes acompanham o instalador em `licenses/managed/`.
 
 O repositório não redistribui binários/modelos. O pacote completo inclui avisos
 em `licenses/`. Esses avisos não concedem direitos adicionais. Antes de publicar

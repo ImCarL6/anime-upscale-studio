@@ -2,9 +2,18 @@
 
 ## Próxima versão
 
-- TESTE LOCAL controle ao vivo: permite alternar Trabalhar e assistir (CPU 35%), Equilibrado (CPU 75%) e Desempenho máximo durante o mesmo bloco. Troca a cadência via comandos locais ao FFmpeg, sem alterar frames ou reiniciar o trabalho. Mantém monitoramento de memória e retomadas também no máximo. Fila de um vídeo e históricos com modos mistos excluídos das estimativas de modo fixo. Prévia separada da estável.
+## 0.1.6 — 2026-10-20
 
-- TESTE LOCAL segundo plano v2: remove os gatilhos globais de 70%/80% e o limite rígido de memória que podia provocar falhas de alocação. CPU 35%/50%, GPU em prioridade baixa, cadência no pipe e blocos de 60 segundos. Aguarda reserva antes de iniciar cada bloco; pressão crítica sustentada encerra somente a tentativa. Retoma no máximo duas vezes com espera e ritmo progressivamente menor. Não publicado como versão estável.
+- Valida a entrada antes do upscale: leitura integral dos pacotes, duração real e decodificação de vídeo e todos os áudios; bloqueia arquivo truncado mesmo quando o leitor retorna código zero. Legendas que terminam após o vídeo são aceitas quando explicam a duração anunciada.
+- Integra controle de recursos ao vivo: Trabalhar e assistir, Equilibrado e Desempenho máximo. Troca CPU e cadência no mesmo bloco, com proteção de memória e até duas retomadas automáticas.
+- A fila normal aceita episódios adicionados durante a execução e os processa sem novo clique em Iniciar. Comandos avançados com caminhos literais continuam restritos a um arquivo por execução.
+- Salva fila, ordem, resultados, parâmetros dos itens pendentes e tempo acumulado entre sessões, com gravação atômica e cópia de recuperação. Restaura trabalhos interrompidos como pendentes, sem iniciar sozinho nem repetir concluídos.
+- Lembra pasta de saída e diretório da seleção de episódios.
+- Padrões: AnimeJaNai, V3.1 Balanced Sharp1, CQ 18 e Equilibrado. Destaca o botão para ativar Desempenho máximo.
+- Remove referências a um aparelho específico da interface e apresenta compatibilidade de reprodução de forma geral.
+- Corrige o relógio da fila: mostra tempo acumulado em execução e mantém o total após conclusão e entre sessões.
+
+
 
 ## 0.1.5 — 2026-10-20
 

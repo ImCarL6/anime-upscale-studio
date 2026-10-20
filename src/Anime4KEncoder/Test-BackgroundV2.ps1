@@ -23,9 +23,10 @@ function Pump-Until([scriptblock]$Condition, [int]$TimeoutSeconds = 120) {
 }
 try {
     $mode=$window.FindName('ResourceModeCombo')
-    Check ($mode.SelectedIndex -eq 0) 'Default background mode wrong.'
+    Check ($mode.SelectedIndex -eq 1) 'Default background mode wrong.'
     Check ($window.FindName('CqText').Text -eq '18') 'CQ default wrong.'
-    Check ($window.FindName('ProfileCombo').SelectedItem.Code -eq 'V3-Compact-Sharp1') 'Profile default wrong.'
+    Check ($window.FindName('ProfileCombo').SelectedItem.Code -eq 'V3.1-Balanced-Sharp1') 'Profile default wrong.'
+    $mode.SelectedIndex=0
     $profiles=$window.FindName('ProfileCombo')
     for($i=0;$i -lt $profiles.Items.Count;$i++) {if($profiles.Items[$i].Code -eq $ProfileCode) {$profiles.SelectedIndex=$i;break}}
     $item=[Activator]::CreateInstance($itemType,@([IO.Path]::GetFullPath($FixturePath)))

@@ -54,8 +54,8 @@ public partial class MainWindow : Window
     private readonly SemaphoreSlim _fingerprintGate = new(1, 1);
     private CancellationTokenSource? _queueCancellation;
     private readonly DispatcherTimer _elapsedTimer;
-    private DateTimeOffset? _queueStartedAt;
-    private TimeSpan? _queueElapsed;
+
+
     private bool _environmentReady;
     private EncodeItem? _activePilotItem;
     private PilotRunResult? _lastPilotResult;
@@ -98,6 +98,7 @@ public partial class MainWindow : Window
         ValidateEnvironment();
         Loaded += async (_, _) => await CheckPortableEnvironmentAsync();
         InitializeUpdates();
+        InitializeSession();
     }
 
     private static string FindProjectRoot()
@@ -252,7 +253,7 @@ public partial class MainWindow : Window
         {
             ProfileLabel.Text = "Modelo AnimeJaNai";
             ProfileCombo.ItemsSource = _animeJanaiPresets;
-            ProfileCombo.SelectedIndex = _animeJanaiPresets.FindIndex(p => p.Code == "V3-Compact-Sharp1");
+            ProfileCombo.SelectedIndex = _animeJanaiPresets.FindIndex(p => p.Code == "V3.1-Balanced-Sharp1");
             ConcurrencyCombo.SelectedIndex = 0;
             ConcurrencyCombo.IsEnabled = false;
             CompatibilitySummaryText.Text = "TensorRT → blocos recuperáveis de 1 min → AV1 10-bit. Áudio, legendas, capítulos e anexos vêm do original no remux final.";
@@ -433,39 +434,19 @@ public partial class MainWindow : Window
 
     private async void AddFiles_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog
+        _addingFiles++;
+        try
         {
-            Multiselect = true,
-            Filter = "Vídeos MKV|*.mkv|Vídeos compatíveis|*.mkv;*.mp4;*.webm|Todos os arquivos|*.*"
-        };
-        if (dialog.ShowDialog() != true) return;
-
-        foreach (var path in dialog.FileNames.Where(p => Items.All(i => !string.Equals(i.InputPath, p, StringComparison.OrdinalIgnoreCase))))
-        {
-            var item = new EncodeItem(path);
-            Items.Add(item);
-            try
+            var dialog = new OpenFileDialog
             {
-                var media = await ProbeMediaAsync(path);
-                item.ApplyMediaInfo(media);
-                item.Status = "Aguardando";
-                item.Compatibility = media.Width == 1920 && media.Height == 1080
-                    ? "Entrada adequada"
-                    : $"Revisar {media.Width}×{media.Height}";
-            }
-            catch (Exception ex)
-            {
-                item.Status = "Erro ao analisar";
-                item.Error = ex.Message;
-                item.Compatibility = "Não analisado";
-            }
+                Multiselect = true,
+                InitialDirectory = Directory.Exists(_inputDirectory) ? _inputDirectory : "",
+                Filter = "Vídeos MKV|*.mkv|Vídeos compatíveis|*.mkv;*.mp4;*.webm|Todos os arquivos|*.*"
+            };
+            if (dialog.ShowDialog() == true) await AddInputsAsync(dialog.FileNames);
         }
-
-        UpdateEstimates();
-        RefreshOverall();
-        SchedulePilotCacheRefresh();
+        finally { _addingFiles--; SaveSession(); }
     }
-
     private void RemoveSelected_Click(object sender, RoutedEventArgs e)
     {
         foreach (var item in QueueGrid.SelectedItems.Cast<EncodeItem>().Where(i => !i.IsRunning).ToArray())
@@ -485,7 +466,7 @@ public partial class MainWindow : Window
 
     private void ChooseOutput_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog { Title = "Selecione a pasta de saída", Multiselect = false };
+        var dialog = new OpenFolderDialog { Title = "Selecione a pasta de saída", Multiselect = false, InitialDirectory = Directory.Exists(OutputDirectoryText.Text) ? OutputDirectoryText.Text : "" };
         if (dialog.ShowDialog() == true) OutputDirectoryText.Text = dialog.FolderName;
     }
 
@@ -595,19 +576,18 @@ public partial class MainWindow : Window
         var concurrency = ReadConcurrency();
         _queueCancellation = new CancellationTokenSource();
         SetRunningUi(true);
-        _queueStartedAt = DateTimeOffset.Now;
-        _queueElapsed = TimeSpan.Zero;
+        _queueWatch.Restart();
         _elapsedTimer.Start();
         using var gate = new SemaphoreSlim(concurrency);
 
         try
         {
-            foreach (var item in pending)
-                await EncodeInBackgroundAsync(item, settings, _queueCancellation.Token);
+            await RunQueueAsync(settings, _queueCancellation.Token);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
+            _queueWatch.Stop();
             ResourceStatusText.Text = ex.Message;
             MessageBox.Show(ex.Message, "Proteção de recursos", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -615,7 +595,9 @@ public partial class MainWindow : Window
         {
             EndResourceProtection();
             _elapsedTimer.Stop();
-            if (_queueStartedAt.HasValue) _queueElapsed = DateTimeOffset.Now - _queueStartedAt.Value;
+            _savedQueueSeconds += _queueWatch.Elapsed.TotalSeconds;
+            _queueWatch.Reset();
+            SaveSession();
             SetRunningUi(false);
             RefreshOverall();
             _queueCancellation.Dispose();
@@ -1024,7 +1006,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        TryDelete(partialPath);
+
         Directory.CreateDirectory(workDirectory);
         var stopwatch = Stopwatch.StartNew();
         MediaStructure? segmentedSource = null;
@@ -1032,6 +1014,9 @@ public partial class MainWindow : Window
 
         try
         {
+            await ValidateInputIntegrityAsync(item, cancellationToken);
+            var validatedIdentity = InputIdentity(item.InputPath);
+            TryDelete(partialPath);
             if (settings.Engine == "anime4k")
                 await RunAnime4KAsync(item, settings, partialPath, logPath, cancellationToken);
             else if (useSegmentedAnimeJanai)
@@ -1039,10 +1024,11 @@ public partial class MainWindow : Window
             else
                 await RunAnimeJanaiPipeAsync(item, settings, partialPath, workDirectory, logPath, cancellationToken);
 
-            await Dispatcher.InvokeAsync(() => { item.Status = "Validando"; item.Stage = "Validação Jellyfin"; });
+            await Dispatcher.InvokeAsync(() => { item.Status = "Validando"; item.Stage = "Validação final"; });
             var validation = segmentedSource is null
                 ? await ValidateOutputAsync(item, partialPath, cancellationToken)
                 : await ValidateSegmentedOutputAsync(item, partialPath, segmentedSource, cancellationToken);
+            if (validatedIdentity != InputIdentity(item.InputPath)) throw new InvalidOperationException("A entrada foi alterada durante o processamento.");
             File.Move(partialPath, finalPath);
             outputCompleted = true;
             stopwatch.Stop();
@@ -1906,10 +1892,10 @@ public partial class MainWindow : Window
         if (!media.PixelFormat.Contains("10", StringComparison.OrdinalIgnoreCase) && !media.PixelFormat.Contains("p010", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"A saída não foi identificada como 10-bit: {media.PixelFormat}.");
 
-        if (media.BitRate > 100_000_000) return "Bitrate acima do perfil Fire TV";
+        if (media.BitRate > 100_000_000) return "Bitrate elevado; verifique a capacidade do dispositivo";
         return media.HasAssSubtitle
             ? "Vídeo direto; ASS pode transcodificar"
-            : "Provável reprodução direta";
+            : "Vídeo validado; reprodução depende do dispositivo";
     }
 
     private async Task<string> ValidateSegmentedOutputAsync(
@@ -2019,14 +2005,17 @@ public partial class MainWindow : Window
             AppendLog(logPath,
                 $"\n[{DateTime.Now:O}] Validação do áudio {index + 1}/{audioStreams} da {label}\n" +
                 $"{FormatCommand(_ffmpeg, args)}\n{output}{error}\nExitCode={process.ExitCode}\n");
-            if (process.ExitCode != 0)
+            if (process.ExitCode != 0 || !string.IsNullOrWhiteSpace(error))
                 throw new InvalidOperationException(string.IsNullOrWhiteSpace(error)
                     ? $"O áudio {index + 1} da {label} falhou na validação."
                     : $"O áudio {index + 1} da {label} é inválido: {Tail(error)}");
         }
     }
 
-    private async Task<MediaInfo> ProbeMediaAsync(string path, CancellationToken cancellationToken = default)
+    private Task<MediaInfo> ProbeMediaAsync(string path, CancellationToken cancellationToken = default)
+        => ProbeMediaCoreAsync(path, cancellationToken, true);
+
+    private async Task<MediaInfo> ProbeMediaCoreAsync(string path, CancellationToken cancellationToken, bool protectedWorker)
     {
         var args = new[]
         {
@@ -2036,7 +2025,12 @@ public partial class MainWindow : Window
         };
         var psi = CreateProcessInfo(_ffprobe, args, Path.GetDirectoryName(_ffprobe)!);
         using var process = new Process { StartInfo = psi };
-        StartWorker(process);
+        if (protectedWorker) StartWorker(process);
+        else
+        {
+            process.Start();
+            process.PriorityClass = ProcessPriorityClass.BelowNormal;
+        }
         using var registration = cancellationToken.Register(() => KillProcess(process));
         var jsonTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
@@ -2139,6 +2133,7 @@ public partial class MainWindow : Window
         var error = await errorTask;
         if (process.ExitCode != 0)
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? "FFprobe falhou ao inventariar a mídia." : Tail(error));
+        InputTimeline.ValidateReader(process.ExitCode, error);
 
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -2422,15 +2417,9 @@ public partial class MainWindow : Window
         var concurrency = ReadConcurrency();
         var eta = TimeSpan.FromSeconds(Math.Max(0, remainingSeconds / Math.Max(1, concurrency)));
         var etaText = remainingSeconds > 0 ? FormatDuration(eta) : "—";
-        var elapsedText = "";
-        if (_queueStartedAt.HasValue)
-        {
-            var elapsed = _queueElapsed ?? (DateTimeOffset.Now - _queueStartedAt.Value);
-            elapsedText = running > 0 ? $" • Decorrido: {FormatDuration(elapsed)}" : $" • Tempo total: {FormatDuration(elapsed)}";
-        }
-        OverallStatusText.Text = $"{completed}/{Items.Count} concluídos • {running} processando • ETA total: {etaText}{elapsedText}";
+        QueueElapsedText.Text = $"Tempo acumulado da fila: {FormatDuration(QueueElapsed)}";
+        OverallStatusText.Text = $"{completed}/{Items.Count} concluídos • {running} processando • ETA total: {etaText}";
     }
-
     private void SetRunningUi(bool running)
     {
         if (running) _pilotCacheRefreshCancellation?.Cancel();
@@ -3523,7 +3512,7 @@ public static class PilotPlanner
             projectedSeconds * (1 + ProjectionMargin));
     }
 }
-public sealed record MediaInfo(TimeSpan Duration, long Size, long BitRate, string VideoCodec, string PixelFormat, int Width, int Height, bool HasAssSubtitle, IReadOnlyList<string> AudioCodecs, long EstimatedAudioOutputBitRate);
+
 public sealed record MediaStructure(
     double DurationSeconds,
     string VideoCodec,
@@ -3682,6 +3671,8 @@ public sealed class EncodeItem : INotifyPropertyChanged
     }
 
     public EncodeItem(string inputPath) => InputPath = inputPath;
+
+    internal void RestoreElapsed(TimeSpan elapsed) => Elapsed = elapsed;
 
     public void UpdateElapsed(DateTimeOffset now)
     {

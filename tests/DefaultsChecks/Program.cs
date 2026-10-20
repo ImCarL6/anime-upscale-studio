@@ -15,9 +15,9 @@ internal static class Program
         var profile = ((ComboBox)window.FindName("ProfileCombo")).SelectedItem;
         var cq = ((TextBox)window.FindName("CqText")).Text;
         if ((string?)engine?.GetType().GetProperty("Code")?.GetValue(engine) != "animejanai" ||
-            (string?)profile?.GetType().GetProperty("Code")?.GetValue(profile) != "V3-Compact-Sharp1" || cq != "18")
+            (string?)profile?.GetType().GetProperty("Code")?.GetValue(profile) != "V3.1-Balanced-Sharp1" || cq != "18" || ((ComboBox)window.FindName("ResourceModeCombo")).SelectedIndex != 1)
             throw new Exception("Unexpected startup defaults.");
-        Console.WriteLine("STARTUP_DEFAULTS=PASS: AnimeJaNai, V3 Compact Sharp1, CQ 18.");
+        Console.WriteLine("STARTUP_DEFAULTS=PASS: AnimeJaNai, V3.1 Balanced Sharp1, CQ 18.");
         window.Close();
         app.Shutdown();
     }

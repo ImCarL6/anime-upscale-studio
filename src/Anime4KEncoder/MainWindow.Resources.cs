@@ -40,6 +40,8 @@ public partial class MainWindow
         {
             while (true)
             {
+                item.IsRunning = true;
+                item.Stage = _backgroundRecovery.Retries > 0 ? $"Aguardando retomada {_backgroundRecovery.Retries}/2" : "Aguardando reserva de recursos";
                 await WaitForResourceReserveAsync(token, _backgroundRecovery.Retries > 0);
                 using var attempt = CancellationTokenSource.CreateLinkedTokenSource(token);
                 _allocationFailed = false;
@@ -50,7 +52,7 @@ public partial class MainWindow
                 var recoverable = _resourceStopReason is not null || _allocationFailed;
                 if (!recoverable) return;
                 if (settings.Engine != "animejanai" || !string.IsNullOrWhiteSpace(settings.AdvancedFfmpegCommand))
-                    throw new InvalidOperationException("A retomada automática desta prévia exige AnimeJaNai por blocos. Arquivos preservados.");
+                    throw new InvalidOperationException("A retomada automática exige AnimeJaNai por blocos. Arquivos preservados.");
                 if (!_backgroundRecovery.TryRetry(recoverable, token.IsCancellationRequested))
                 {
                     item.Status = "Falhou";
@@ -62,7 +64,9 @@ public partial class MainWindow
                 item.Status = "Aguardando";
             }
         }
-        finally { _backgroundRecovery = null; }
+        catch (OperationCanceledException) { item.Status = "Cancelado"; throw; }
+        catch (Exception ex) { item.Status = "Falhou"; item.Error = ex.Message; throw; }
+        finally { item.IsRunning = false; _backgroundRecovery = null; }
     }
 
     private LivePacing? _livePacing;
@@ -91,7 +95,7 @@ public partial class MainWindow
             if (File.Exists(path))
             {
                 var percent = JsonSerializer.Deserialize<int>(File.ReadAllText(path));
-                ResourceModeCombo.SelectedIndex = percent switch { 80 => 1, 100 => 2, _ => 0 };
+                ResourceModeCombo.SelectedIndex = percent switch { 70 => 0, 100 => 2, _ => 1 };
             }
         }
         catch { /* A missing/corrupt setting falls back to the protected default. */ }
@@ -102,6 +106,7 @@ public partial class MainWindow
     private void ResourceMode_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (!_resourceControlsReady) return;
+        MaximumPerformanceButton.Content = ReadResourcePercent() == 100 ? "⚡ Desempenho máximo ativo" : "⚡ Ativar desempenho máximo";
         try
         {
             _resourceProtection?.ApplyMode(ReadResourcePercent());
