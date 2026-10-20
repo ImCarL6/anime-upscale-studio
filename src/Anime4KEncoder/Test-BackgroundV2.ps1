@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Package, [string]$FixturePath = '', [switch]$ForceRecovery, [switch]$CancelRecovery, [string]$ProfileCode = 'V3.1-Balanced')
+param([Parameter(Mandatory)][string]$Package, [string]$FixturePath = '', [switch]$ForceRecovery, [switch]$CancelRecovery, [string]$ProfileCode = 'V3.1-Balanced', [switch]$LiveSwitch)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
@@ -36,6 +36,7 @@ try {
     $window.Items.Add($item)
     $output=Join-Path $Package 'validation\background-v2\output'
     if($ForceRecovery) {$output=Join-Path $Package ('validation\background-v2\recovery-'+[guid]::NewGuid().ToString('N'))}
+    if($LiveSwitch) {$output=Join-Path $Package ('validation\live\switch-'+[guid]::NewGuid().ToString('N'))}
     $window.FindName('OutputDirectoryText').Text=$output
     $parameters=[object[]]@($null)
     Check ($windowType.GetMethod('TryBuildCurrentFingerprintSettings',$flags).Invoke($window,$parameters)) 'Could not build settings.'
@@ -43,6 +44,23 @@ try {
     $windowType.GetField('_queueCancellation',$flags).SetValue($window,$cts)
     $clock=[Diagnostics.Stopwatch]::StartNew()
     $task=$windowType.GetMethod('EncodeInBackgroundAsync',$flags).Invoke($window,@($item,$parameters[0],$cts.Token))
+    if($LiveSwitch) {
+        $windowType.GetMethod('SetRunningUi',$flags).Invoke($window,@($true))
+        Check $mode.IsEnabled 'Live mode selector is disabled while running.'
+        Pump-Until { $live=$windowType.GetField('_livePacing',$flags).GetValue($window); $null -ne $live -and $live.GetType().GetProperty('AppliedRate',$flags).GetValue($live) -eq 0.15 } 120
+        $pacing=$windowType.GetField('_livePacing',$flags).GetValue($window)
+        $originalLog=$item.LogPath
+        foreach($index in @(1,0,2)) {
+            $clockSwitch=[Diagnostics.Stopwatch]::StartNew()
+            $mode.SelectedIndex=$index
+            $expected=@(0.15,0.25,1000000)[$index]
+            Pump-Until { $pacing.GetType().GetProperty('AppliedRate',$flags).GetValue($pacing) -eq $expected } 5
+            Check ([object]::ReferenceEquals($pacing,$windowType.GetField('_livePacing',$flags).GetValue($window))) 'Pacing process was replaced.'
+            Check (!$cts.IsCancellationRequested) 'Live switch cancelled queue.'
+            Check ($originalLog -eq $item.LogPath) 'Live switch restarted the attempt.'
+            Write-Output ('LIVE_UI_SWITCH='+$index+'; ACK_MS='+$clockSwitch.ElapsedMilliseconds)
+        }
+    }
     if($ForceRecovery) {
         Pump-Until { $null -ne $windowType.GetField('_resourceProtection',$flags).GetValue($window) -and $item.IsRunning -and (Test-Path -LiteralPath $item.LogPath) -and ((Get-Content -LiteralPath $item.LogPath -Raw).Contains('FFmpeg AV1 bloco')) } 60
         $guard=$windowType.GetField('_resourceProtection',$flags).GetValue($window)
@@ -63,13 +81,18 @@ try {
     Check (Test-Path -LiteralPath $item.OutputPath) 'Output missing.'
     Check (!(Test-Path -LiteralPath (Join-Path $output '.anime-upscale-temp'))) 'Successful work temp remains.'
     $log=Get-Content -LiteralPath $item.LogPath -Raw
-    if(!$ForceRecovery) { Check ($log.Contains('-readrate 0.15')) 'Pacing missing in real command.' }
+    if(!$ForceRecovery) { Check ($log.Contains('realtime@throttle')) 'Live pacing missing in real command.' }
     if($ForceRecovery) {
-        Check ($log.Contains('-readrate 0.075')) 'Retry did not slow down.'
+        Check ($log.Contains('speed=0.075')) 'Retry did not slow down.'
         Check ($clock.Elapsed.TotalSeconds -ge 30) 'Recovery cooldown not applied.'
         Write-Output 'AUTOMATIC_RECOVERY=PASS: forced attempt stop, cooldown, slower retry, final validation and cleanup.'
     }
     Write-Output ('BACKGROUND_PIPELINE=PASS: '+$item.OutputPath+'; wall='+$clock.Elapsed.TotalSeconds+'; log='+$item.LogPath)
+    if($LiveSwitch) {
+        Check (!$log.Contains('Retomada automática')) 'Live mode changes restarted processing.'
+        Check ($windowType.GetField('_resourceModeChangedDuringRun',$flags).GetValue($window)) 'Mixed-mode history marker missing.'
+        Write-Output 'LIVE_UI_PIPELINE=PASS: modes changed within active block, same attempt, final validation and cleanup.'
+    }
     $cts.Dispose()
     $windowType.GetField('_queueCancellation',$flags).SetValue($window,$null)
 } finally { $active=$windowType.GetField('_queueCancellation',$flags).GetValue($window); if($active){$active.Cancel()}; $windowType.GetField('_queueCancellation',$flags).SetValue($window,$null); $window.Close() }

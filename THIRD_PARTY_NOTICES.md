@@ -12,6 +12,11 @@
 
 This software contains source code provided by NVIDIA Corporation.
 
+O teste de controle ao vivo usa NetMQ 4.0.4.4, distribuído em DLL separada:
+https://github.com/zeromq/netmq — LGPLv3, conforme o arquivo
+COPYING.LESSER do projeto. Dependências gerenciadas são registradas em
+packages.lock.json; suas licenças acompanham os respectivos pacotes NuGet.
+
 O repositório não redistribui binários/modelos. O pacote completo inclui avisos
 em `licenses/`. Esses avisos não concedem direitos adicionais. Antes de publicar
 instaladores públicos, conferir os termos dos binários aji, dos modelos convertidos

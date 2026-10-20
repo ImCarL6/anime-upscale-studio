@@ -240,7 +240,7 @@ public partial class MainWindow : Window
         StartButton.IsEnabled = ready;
         PilotButton.IsEnabled = ready;
         FooterText.Text = ready
-            ? "AnimeJaNai usa blocos recuperáveis de 5 min isolados por fingerprint da toolchain; o original nunca é alterado."
+            ? "AnimeJaNai usa blocos recuperáveis de 1 min isolados por fingerprint da toolchain; o original nunca é alterado."
             : $"Projeto: {_root}";
     }
 
@@ -255,14 +255,14 @@ public partial class MainWindow : Window
             ProfileCombo.SelectedIndex = _animeJanaiPresets.FindIndex(p => p.Code == "V3-Compact-Sharp1");
             ConcurrencyCombo.SelectedIndex = 0;
             ConcurrencyCombo.IsEnabled = false;
-            CompatibilitySummaryText.Text = "TensorRT → blocos recuperáveis de 5 min → AV1 10-bit. Áudio, legendas, capítulos e anexos vêm do original no remux final.";
+            CompatibilitySummaryText.Text = "TensorRT → blocos recuperáveis de 1 min → AV1 10-bit. Áudio, legendas, capítulos e anexos vêm do original no remux final.";
         }
         else
         {
             ProfileLabel.Text = "Preset / shader Anime4K";
             ProfileCombo.ItemsSource = _shaderPresets;
             ProfileCombo.SelectedIndex = 0;
-            ConcurrencyCombo.IsEnabled = _queueCancellation is null && ReadResourcePercent() == 100;
+            ConcurrencyCombo.IsEnabled = false;
             CompatibilitySummaryText.Text = "AV1 Main 10-bit, 4K, MKV e AAC 48 kHz. Legendas ASS podem exigir transcodificação.";
         }
 
@@ -602,20 +602,8 @@ public partial class MainWindow : Window
 
         try
         {
-            if (settings.ResourcePercent < 100)
-            {
-                foreach (var item in pending)
-                    await EncodeInBackgroundAsync(item, settings, _queueCancellation.Token);
-            }
-            else
-            {
-                await Task.WhenAll(pending.Select(async item =>
-                {
-                    await gate.WaitAsync(_queueCancellation.Token);
-                    try { await EncodeAsync(item, settings, _queueCancellation.Token); }
-                    finally { gate.Release(); }
-                }));
-            }
+            foreach (var item in pending)
+                await EncodeInBackgroundAsync(item, settings, _queueCancellation.Token);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -905,7 +893,7 @@ public partial class MainWindow : Window
                 previewPath,
                 logPath,
                 DateTimeOffset.Now,
-                comparison) { ResourcePercent = settings.ResourcePercent };
+                comparison) { ResourcePercent = _resourceModeChangedDuringRun ? -1 : settings.ResourcePercent };
             File.WriteAllText(reportPath, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
             AppendLog(logPath, $"\nPiloto validado.\nRelatório={reportPath}\nAmostra={previewPath}\n{BuildPilotSummary(result)}\n");
 
@@ -1080,7 +1068,7 @@ public partial class MainWindow : Window
                 settings.IsBeta,
                 EffectiveBetaSignature(settings),
                 useSegmentedAnimeJanai ? SegmentedPipelineVersion : 0,
-                useSegmentedAnimeJanai ? AnimeJanaiSegmentSeconds : 0) { ResourcePercent = settings.ResourcePercent });
+                useSegmentedAnimeJanai ? AnimeJanaiSegmentSeconds : 0) { ResourcePercent = _resourceModeChangedDuringRun ? -1 : settings.ResourcePercent });
 
             await Dispatcher.InvokeAsync(() =>
             {
@@ -1136,7 +1124,7 @@ public partial class MainWindow : Window
     {
         if (string.IsNullOrWhiteSpace(settings.ShaderPath)) throw new InvalidOperationException("O shader combinado não foi criado.");
         var args = BuildFfmpegArguments(item.InputPath, outputPath, settings.Cq, settings.ShaderPath);
-        ApplyBackgroundReadRate(args, settings);
+        using var livePacing = CreateLivePacing(args, settings);
         args = ApplyBetaOptions(args, settings.BetaOptions ?? new BetaFfmpegOptions());
         args = ApplyAdvancedFfmpegCommand(args, settings.AdvancedFfmpegCommand, item.InputPath, outputPath);
 
@@ -1260,8 +1248,7 @@ public partial class MainWindow : Window
         for (var index = 0; index < segments.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (settings.ResourcePercent < 100)
-                await WaitForResourceReserveAsync(cancellationToken, false);
+            await WaitForResourceReserveAsync(cancellationToken, false);
             var segment = segments[index];
             var checkpoint = manifest.Segments[index];
             var completedPath = Path.Combine(cacheDirectory, SegmentFileName(segment.Index));
@@ -1427,13 +1414,7 @@ public partial class MainWindow : Window
             settings.Cq,
             segment.PrefixOverlapFrames,
             segment.UsefulFrameCount);
-        if (settings.ResourcePercent < 100)
-        {
-            var rate = (_backgroundRecovery ?? new BackgroundRecovery()).ReadRate(settings.ResourcePercent);
-            var inputIndex = ffmpegArgs.IndexOf("-i");
-            ffmpegArgs.InsertRange(inputIndex, ["-readrate", rate.ToString(CultureInfo.InvariantCulture), "-readrate_initial_burst", "0", "-readrate_catchup", rate.ToString(CultureInfo.InvariantCulture)]);
-            AppendLog(logPath, $"\nTeste segundo plano v2: leitura limitada a {rate:0.###}x, blocos de 60s.\n");
-        }
+        using var livePacing = CreateLivePacing(ffmpegArgs, settings);
         ffmpegArgs = ApplyBetaOptions(ffmpegArgs, settings.BetaOptions ?? new BetaFfmpegOptions());
 
         var ajiInfo = CreateProcessInfo(_ajiEncode, ajiArgs, _inferenceDirectory);
@@ -1625,7 +1606,7 @@ public partial class MainWindow : Window
         };
 
         var ffmpegArgs = BuildFfmpegArguments("pipe:0", outputPath, settings.Cq, null);
-        ApplyBackgroundReadRate(ffmpegArgs, settings);
+        using var livePacing = CreateLivePacing(ffmpegArgs, settings);
         ffmpegArgs = ApplyBetaOptions(ffmpegArgs, settings.BetaOptions ?? new BetaFfmpegOptions());
         ffmpegArgs = ApplyAdvancedFfmpegCommand(ffmpegArgs, settings.AdvancedFfmpegCommand, "pipe:0", outputPath);
 
@@ -2460,8 +2441,9 @@ public partial class MainWindow : Window
         ProfileCombo.IsEnabled = !running;
         CqText.IsEnabled = !running;
         OutputDirectoryText.IsEnabled = !running;
-        ConcurrencyCombo.IsEnabled = !running && ReadResourcePercent() == 100 && EngineCombo.SelectedItem is EngineOption { Code: "anime4k" };
-        ResourceModeCombo.IsEnabled = !running;
+        ConcurrencyCombo.IsEnabled = false;
+        ResourceModeCombo.IsEnabled = true;
+        if (running) _resourceModeChangedDuringRun = false;
         AdvancedModeCheck.IsEnabled = !running;
         BetaPanel.IsEnabled = !running;
     }

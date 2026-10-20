@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>painter.ico</ApplicationIcon>
     <StartupObject>Anime4KEncoder.App</StartupObject>
-    <Version>0.1.6-background.2</Version>
+    <Version>0.1.6-background.3</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
@@ -16,6 +16,7 @@
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
     <PackageReference Include="Velopack" Version="1.2.0" />
+    <PackageReference Include="NetMQ" Version="4.0.4.4" />
     <Content Include="..\..\CHANGELOG.md" Link="CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

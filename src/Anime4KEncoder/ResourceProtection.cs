@@ -52,6 +52,25 @@ internal sealed class ResourceProtection : IDisposable
     private string? _stopReason;
     private bool _disposed;
     private bool _gpuPriorityUnavailable;
+    private readonly List<Process> _processes = [];
+    private int _liveMode;
+
+    internal static int CpuPercent(int mode) => mode switch { 70 => 35, 80 => 75, _ => 100 };
+
+    internal void ApplyMode(int mode)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var cpu = new Native.CpuRate { ControlFlags = mode == 100 ? 0u : 5u, CpuRateValue = mode == 100 ? 0u : (uint)CpuPercent(mode) * 100 };
+            if (mode != 100 || _liveMode != 100)
+                Native.Check(Native.SetCpuRate(_job, 15, ref cpu, (uint)Marshal.SizeOf<Native.CpuRate>()));
+            _liveMode = mode;
+            foreach (var process in _processes)
+                try { if (!process.HasExited) { process.PriorityClass = mode == 100 ? ProcessPriorityClass.Normal : ProcessPriorityClass.BelowNormal; _gpuPriorityUnavailable = Native.D3DKMTSetProcessSchedulingPriorityClass(process.Handle, mode == 100 ? 2 : 0) != 0; } }
+                catch (InvalidOperationException) { }
+        }
+    }
 
     internal string? StopReason { get { lock (_gate) return _stopReason; } }
     internal ulong MemoryBudget { get; }
@@ -59,8 +78,9 @@ internal sealed class ResourceProtection : IDisposable
     internal ResourceProtection(int percent, CancellationTokenSource queueCancellation,
         Action<ResourceSnapshot, string> report, Func<ResourceSnapshot>? sample = null)
     {
-        if (percent is not (70 or 80)) throw new ArgumentOutOfRangeException(nameof(percent));
-        _percent = percent;
+        if (percent is not (70 or 80 or 100)) throw new ArgumentOutOfRangeException(nameof(percent));
+        _percent = 70; // Emergency monitoring remains active even in maximum mode.
+        _liveMode = percent;
         _queueCancellation = queueCancellation;
         _report = report;
         _nvidia = sample is null ? NvidiaMemoryReader.TryCreate() : null;
@@ -76,8 +96,9 @@ internal sealed class ResourceProtection : IDisposable
             limits.Basic.LimitFlags = 0x2000; // KILL_ON_JOB_CLOSE; no artificial allocation failures
 
             Native.Check(Native.SetExtendedLimits(_job, 9, ref limits, (uint)Marshal.SizeOf<Native.ExtendedLimits>()));
-            var cpu = new Native.CpuRate { ControlFlags = 1 | 4, CpuRateValue = (uint)(percent == 70 ? 35 : 50) * 100 }; // ENABLE | HARD_CAP
-            Native.Check(Native.SetCpuRate(_job, 15, ref cpu, (uint)Marshal.SizeOf<Native.CpuRate>()));
+            var cpu = new Native.CpuRate { ControlFlags = percent == 100 ? 0u : 5u, CpuRateValue = (uint)CpuPercent(percent) * 100 };
+            if (percent != 100)
+                Native.Check(Native.SetCpuRate(_job, 15, ref cpu, (uint)Marshal.SizeOf<Native.CpuRate>()));
             _report(initial, MonitoringNote(initial));
             _monitor = Task.Run(MonitorAsync);
         }
@@ -103,9 +124,10 @@ internal sealed class ResourceProtection : IDisposable
             try
             {
                 Native.Check(Native.AssignProcessToJobObject(_job, process.Handle));
-                process.PriorityClass = ProcessPriorityClass.BelowNormal;
+                _processes.Add(process);
+                process.PriorityClass = _liveMode == 100 ? ProcessPriorityClass.Normal : ProcessPriorityClass.BelowNormal;
                 // Supported WDDM scheduling priority; does not impose a GPU utilization cap.
-                if (Native.D3DKMTSetProcessSchedulingPriorityClass(process.Handle, 0) != 0)
+                if (Native.D3DKMTSetProcessSchedulingPriorityClass(process.Handle, _liveMode == 100 ? 2 : 0) != 0)
                     _gpuPriorityUnavailable = true;
             }
             catch

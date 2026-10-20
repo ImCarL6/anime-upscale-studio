@@ -1,5 +1,35 @@
 # Segundo plano v2 — prévia local
 
+## Controle ao vivo — 0.1.6-background.3
+
+A prévia atual está em `C:\anime-studio\background-live-preview`, com atalho próprio
+“Anime Upscale Studio - TESTE controle ao vivo”. A prévia v2 anterior e a estável permanecem separadas.
+
+O seletor fica habilitado durante a fila. Trabalhar e assistir aplica CPU 35% e
+cadência 0,15x; Equilibrado aplica CPU 75% e 0,25x; Desempenho máximo remove o teto
+de CPU e a espera voluntária entre frames. Não usa prioridade alta/realtime do Windows.
+A proteção emergencial de memória, reserva de entrada e orçamento de duas retomadas
+permanecem ativos em todos os modos. Um vídeo por vez em todos os modos.
+
+O ajuste de CPU altera o mesmo Job Object. A cadência usa filtros FFmpeg `zmq` e
+`realtime`, com canal de comandos restrito a 127.0.0.1, um endpoint por processo.
+A interface mostra quando o ritmo foi confirmado. A confirmação costuma levar de frações de segundo
+a poucos segundos; processos travados, preparação TensorRT ou inferências demoradas
+podem atrasar a resposta. Não existe teto exato de GPU/VRAM. O comando avançado
+preserva seu texto e recebe somente a troca de CPU/prioridade.
+
+Trocar o modo não apaga caches nem reinicia blocos. Processamentos com troca de
+modo recebem marcador próprio no histórico, para não contaminar as estimativas
+de velocidade de um modo fixo. Qualidade, CQ, resolução e conteúdo permanecem iguais.
+
+Validação: CPU nativa no mesmo processo 35→75→máximo→35; comandos de cadência
+com 200 hashes e timestamps de frames idênticos; troca máximo→limitado→máximo;
+troca pelo seletor durante um bloco Compact Sharp1, saída de 48 frames validada,
+áudio conferido e temporários removidos. Uso prolongado com YouTube depende do teste manual.
+
+As seções abaixo documentam a prévia v2 anterior; os modos e a cadência fixa foram
+substituídos pelo controle ao vivo descrito acima.
+
 Abra `Anime4KEncoder.exe` da pasta desta prévia ou o atalho “Anime Upscale Studio - TESTE segundo plano v2”. A versão estável continua separada.
 
 Padrão: AnimeJaNai, Compact Sharp1 FP16, CQ 18 e “Trabalhar e assistir”. A primeira rodada sugerida é um episódio enquanto trabalha e assiste YouTube. O processamento fica deliberadamente mais lento. A GPU ainda pode apresentar picos de 100%; não há cota rígida de VRAM no backend atual.

@@ -1,5 +1,17 @@
 # Testes
 
+## Controle ao vivo (prévia 0.1.6-background.3)
+
+`ResourceChecks` recebe opcionalmente o caminho do FFmpeg: testa CPU 35→75→máximo→35
+no mesmo processo, emergência de memória ainda ativa em máximo, comandos de
+cadência e identidade de 200 frames/timestamps. Testa máximo→limitado→máximo.
+As dependências de criptografia do projeto de console são fixadas em versões
+corrigidas; o aplicativo WPF usa as dependências fornecidas pelo runtime desktop.
+
+`Test-BackgroundV2.ps1 -Package <prévia> -FixturePath <mídia-sintética> -LiveSwitch`
+verifica seletor habilitado em processamento, confirma os três comandos no mesmo
+bloco/tentativa e exige validação final, limpeza e marcador de histórico misto.
+
 ## Prévia local: segundo plano v2
 
 - `dotnet run --project tests/ResourceChecks/ResourceChecks.csproj`: CPU nativa 35%/50%, herança, remoção do limite artificial de memória, reserva, pressão transitória/sustentada e orçamento de duas retomadas.

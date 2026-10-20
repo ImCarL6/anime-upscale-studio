@@ -2,6 +2,8 @@
 
 ## Próxima versão
 
+- TESTE LOCAL controle ao vivo: permite alternar Trabalhar e assistir (CPU 35%), Equilibrado (CPU 75%) e Desempenho máximo durante o mesmo bloco. Troca a cadência via comandos locais ao FFmpeg, sem alterar frames ou reiniciar o trabalho. Mantém monitoramento de memória e retomadas também no máximo. Fila de um vídeo e históricos com modos mistos excluídos das estimativas de modo fixo. Prévia separada da estável.
+
 - TESTE LOCAL segundo plano v2: remove os gatilhos globais de 70%/80% e o limite rígido de memória que podia provocar falhas de alocação. CPU 35%/50%, GPU em prioridade baixa, cadência no pipe e blocos de 60 segundos. Aguarda reserva antes de iniciar cada bloco; pressão crítica sustentada encerra somente a tentativa. Retoma no máximo duas vezes com espera e ritmo progressivamente menor. Não publicado como versão estável.
 
 ## 0.1.5 — 2026-10-20

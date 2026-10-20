@@ -43,7 +43,7 @@ public partial class MainWindow
                 await WaitForResourceReserveAsync(token, _backgroundRecovery.Retries > 0);
                 using var attempt = CancellationTokenSource.CreateLinkedTokenSource(token);
                 _allocationFailed = false;
-                BeginResourceProtection(settings.ResourcePercent, attempt);
+                BeginResourceProtection(ReadResourcePercent(), attempt);
                 try { await EncodeAsync(item, settings, attempt.Token); }
                 finally { EndResourceProtection(); }
                 token.ThrowIfCancellationRequested();
@@ -65,18 +65,23 @@ public partial class MainWindow
         finally { _backgroundRecovery = null; }
     }
 
-    private void ApplyBackgroundReadRate(List<string> arguments, JobSettings settings)
-    {
-        if (settings.ResourcePercent == 100 || !string.IsNullOrWhiteSpace(settings.AdvancedFfmpegCommand)) return;
-        var rate = (_backgroundRecovery ?? new BackgroundRecovery()).ReadRate(settings.ResourcePercent).ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var index = arguments.IndexOf("-i");
-        if (index >= 0)
-            arguments.InsertRange(index, ["-readrate", rate, "-readrate_initial_burst", "0", "-readrate_catchup", rate]);
-    }
+    private LivePacing? _livePacing;
+    private bool _resourceModeChangedDuringRun;
+    private double CurrentPace() => ReadResourcePercent() == 100 ? 1000000 :
+        (_backgroundRecovery ?? new BackgroundRecovery()).ReadRate(ReadResourcePercent());
 
+    private LivePacing? CreateLivePacing(List<string> arguments, JobSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.AdvancedFfmpegCommand)) return null;
+        var index = arguments.IndexOf("-vf");
+        if (index < 0) return null;
+        var pacing = new LivePacing(CurrentPace());
+        arguments[index + 1] = pacing.Filter + "," + arguments[index + 1];
+        _livePacing = pacing;
+        return pacing;
+    }
     private int ReadResourcePercent() => ResourceModeCombo.SelectedIndex switch { 0 => 70, 1 => 80, _ => 100 };
-    private int ReadConcurrency() => ReadResourcePercent() < 100 || EngineCombo.SelectedItem is EngineOption { Code: "animejanai" }
-        ? 1 : ConcurrencyCombo.SelectedIndex + 1;
+    private int ReadConcurrency() => 1;
 
     private void InitializeResourceControls()
     {
@@ -97,12 +102,27 @@ public partial class MainWindow
     private void ResourceMode_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (!_resourceControlsReady) return;
+        try
+        {
+            _resourceProtection?.ApplyMode(ReadResourcePercent());
+            _livePacing?.SetRate(CurrentPace());
+        }
+        catch (Exception ex)
+        {
+            ResourceStatusText.Text = "Não foi possível aplicar o modo: " + ex.Message;
+            return;
+        }
+        if (_queueCancellation is not null)
+        {
+            _resourceModeChangedDuringRun = true;
+            foreach (var item in Items.Where(item => item.IsRunning && !string.IsNullOrEmpty(item.LogPath)))
+                AppendLog(item.LogPath, $"\nTroca ao vivo: CPU={ResourceProtection.CpuPercent(ReadResourcePercent())}%, ritmo={CurrentPace():0.###}x.\n");
+        }
         if (ReadResourcePercent() < 100) ConcurrencyCombo.SelectedIndex = 0;
-        ConcurrencyCombo.IsEnabled = _queueCancellation is null && ReadResourcePercent() == 100 &&
-            EngineCombo.SelectedItem is EngineOption { Code: "anime4k" };
+        ConcurrencyCombo.IsEnabled = false;
         ResourceStatusText.Text = ReadResourcePercent() < 100
-            ? "Teste v2 • 1 vídeo por vez • ritmo reduzido • espera por reserva • até 2 retomadas automáticas"
-            : "Proteção desativada; processamento sem reserva de recursos";
+            ? "Controle ao vivo • 1 vídeo por vez • ritmo reduzido • espera por reserva • até 2 retomadas automáticas"
+            : "Desempenho liberado • proteção de memória e retomada continuam ativas";
         try
         {
             var path = Path.Combine(_dataRoot, "data", "resource-settings.json");
@@ -119,7 +139,7 @@ public partial class MainWindow
     private void BeginResourceProtection(int percent, CancellationTokenSource? attempt = null)
     {
         _resourceStopReason = null;
-        if (percent == 100) return;
+
         _resourceProtection = new ResourceProtection(percent, attempt ?? _queueCancellation!, (snapshot, note) =>
         {
             _lastResourceSnapshot = snapshot;
@@ -128,7 +148,7 @@ public partial class MainWindow
                 var gpuText = snapshot.Gpus.Count > 0
                     ? string.Join(" / ", snapshot.Gpus.Select(gpu => $"VRAM {100d * gpu.Used / gpu.Total:0}%"))
                     : "VRAM indisponível";
-                ResourceStatusText.Text = $"RAM livre {FormatBytes((long)snapshot.AvailableRam)} • compromisso livre {FormatBytes((long)snapshot.AvailableCommit)} • {gpuText} • CPU até {(percent == 70 ? 35 : 50)}% • {note}";
+                ResourceStatusText.Text = $"RAM livre {FormatBytes((long)snapshot.AvailableRam)} • compromisso livre {FormatBytes((long)snapshot.AvailableCommit)} • {gpuText} • CPU até {ResourceProtection.CpuPercent(ReadResourcePercent())}% • {(_livePacing is { IsDisposed: false } live ? (live.AppliedRate == CurrentPace() ? "ritmo aplicado" : live.Error ?? "aplicando ritmo…") : "preparando etapa")} • {note}";
             });
         });
     }
