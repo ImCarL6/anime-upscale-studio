@@ -107,7 +107,7 @@
                 </StackPanel>
                 <StackPanel Grid.Column="3" Margin="0,0,14,0">
                     <TextBlock Text="CQ" Foreground="{StaticResource Muted}" Margin="0,0,0,6"/>
-                    <TextBox x:Name="CqText" Text="28" HorizontalContentAlignment="Center" TextChanged="Settings_Changed"/>
+                    <TextBox x:Name="CqText" Text="18" HorizontalContentAlignment="Center" TextChanged="Settings_Changed"/>
                 </StackPanel>
                 <StackPanel Grid.Column="4">
                     <TextBlock Text="Simultâneos" Foreground="{StaticResource Muted}" Margin="0,0,0,6"/>

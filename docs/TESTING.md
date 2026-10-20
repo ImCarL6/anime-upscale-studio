@@ -1,5 +1,14 @@
 # Testes
 
+## Limpeza e padrões de abertura (0.1.5)
+
+`ReleaseChecks` verifica remoção após sucesso, preservação em falha/cancelamento,
+isolamento entre trabalhos, limpeza repetida, remoção do diretório pai vazio e
+rejeição de caminhos fora de `.anime-upscale-temp`.
+`dotnet run --project tests/DefaultsChecks/DefaultsChecks.csproj -- <runtime-completo>`
+instancia a janela WPF sem iniciar encoders e confere AnimeJaNai, Compact Sharp1 e CQ 18.
+Isso não substitui uma conversão completa com validação final e limpeza em uso real.
+
 ## Sem GPU / CI
 
 `dotnet run --project tests/ReleaseChecks/ReleaseChecks.csproj` usa apenas fixtures

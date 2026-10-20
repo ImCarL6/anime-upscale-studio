@@ -213,7 +213,7 @@ public partial class MainWindow : Window
             "2x_AnimeJaNai_HD_V3.1Sharp1_Performance_SPANF3_b5f48_unshuffle_fp16"));
 
         EngineCombo.ItemsSource = _engines;
-        EngineCombo.SelectedIndex = 0;
+        EngineCombo.SelectedIndex = _engines.FindIndex(engine => engine.Code == "animejanai");
     }
 
     private void ValidateEnvironment()
@@ -251,7 +251,7 @@ public partial class MainWindow : Window
         {
             ProfileLabel.Text = "Modelo AnimeJaNai";
             ProfileCombo.ItemsSource = _animeJanaiPresets;
-            ProfileCombo.SelectedIndex = _animeJanaiPresets.FindIndex(p => p.Code == "V3.1-Balanced");
+            ProfileCombo.SelectedIndex = _animeJanaiPresets.FindIndex(p => p.Code == "V3-Compact-Sharp1");
             ConcurrencyCombo.SelectedIndex = 0;
             ConcurrencyCombo.IsEnabled = false;
             CompatibilitySummaryText.Text = "TensorRT → blocos recuperáveis de 5 min → AV1 10-bit. Áudio, legendas, capítulos e anexos vêm do original no remux final.";
@@ -324,7 +324,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var cq = int.TryParse(CqText.Text, out var parsed) ? Math.Clamp(parsed, 0, 63) : 28;
+        var cq = int.TryParse(CqText.Text, out var parsed) ? Math.Clamp(parsed, 0, 63) : 18;
         string? shaderPath = null;
         if (engine.Code == "anime4k" && profile is ShaderPreset shaderPreset)
             shaderPath = BuildCombinedShader(shaderPreset);
@@ -924,10 +924,12 @@ public partial class MainWindow : Window
         }
         finally
         {
-            TryDelete(previewPartialPath);
-            foreach (var path in preparedPaths) TryDelete(path);
-            TryDeleteDirectory(workDirectory);
-            if (!completedSuccessfully) TryDeleteDirectory(pilotDirectory);
+            if (completedSuccessfully)
+            {
+                TryDelete(previewPartialPath);
+                foreach (var path in preparedPaths) TryDelete(path);
+                TryDeleteDirectory(workDirectory);
+            }
             pilotItem.IsRunning = false;
             pilotItem.FinishTiming(DateTimeOffset.Now);
             _activePilotItem = null;
@@ -1019,6 +1021,7 @@ public partial class MainWindow : Window
         Directory.CreateDirectory(workDirectory);
         var stopwatch = Stopwatch.StartNew();
         MediaStructure? segmentedSource = null;
+        var outputCompleted = false;
 
         try
         {
@@ -1034,6 +1037,7 @@ public partial class MainWindow : Window
                 ? await ValidateOutputAsync(item, partialPath, cancellationToken)
                 : await ValidateSegmentedOutputAsync(item, partialPath, segmentedSource, cancellationToken);
             File.Move(partialPath, finalPath);
+            outputCompleted = true;
             stopwatch.Stop();
 
             var outputBytes = new FileInfo(finalPath).Length;
@@ -1076,7 +1080,6 @@ public partial class MainWindow : Window
         catch (OperationCanceledException)
         {
             AppendLog(logPath, $"\n[{DateTime.Now:O}] Processamento cancelado; blocos concluídos preservados.\n");
-            TryDelete(partialPath);
             await Dispatcher.InvokeAsync(() =>
             {
                 item.Status = "Cancelado";
@@ -1086,7 +1089,6 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            TryDelete(partialPath);
             AppendLog(logPath, $"\nERRO FINAL\n{ex}\n");
             await Dispatcher.InvokeAsync(() =>
             {
@@ -1098,8 +1100,9 @@ public partial class MainWindow : Window
         }
         finally
         {
-            if (!useSegmentedAnimeJanai)
-                TryDeleteDirectory(workDirectory);
+            var cleanupError = JobTemporaryFiles.Cleanup(workDirectory, outputCompleted);
+            if (cleanupError is not null)
+                AppendLog(logPath, $"\nNão foi possível remover os temporários de {workDirectory}: {cleanupError}\n");
             await Dispatcher.InvokeAsync(() =>
             {
                 UpdateOutputDiskSpace(destinationDirectory);
@@ -1275,6 +1278,7 @@ public partial class MainWindow : Window
             TryDelete(partialSegmentPath);
             TryDelete(sourcePartialPath);
             TryDelete(sourceSegmentPath);
+            var segmentCompleted = false;
             try
             {
                 await Dispatcher.InvokeAsync(() =>
@@ -1322,6 +1326,7 @@ public partial class MainWindow : Window
                 await ValidateVideoSegmentAsync(partialSegmentPath, segment.UsefulFrameCount, cancellationToken,
                     checked(source.Width * 2), checked(source.Height * 2));
                 File.Move(partialSegmentPath, completedPath, true);
+                segmentCompleted = true;
                 checkpoint.Completed = true;
                 checkpoint.CompletedAt = DateTimeOffset.Now;
                 checkpoint.OutputBytes = new FileInfo(completedPath).Length;
@@ -1330,9 +1335,12 @@ public partial class MainWindow : Window
             }
             finally
             {
-                TryDelete(sourcePartialPath);
-                TryDelete(sourceSegmentPath);
-                TryDelete(partialSegmentPath);
+                if (segmentCompleted)
+                {
+                    TryDelete(sourcePartialPath);
+                    TryDelete(sourceSegmentPath);
+                    TryDelete(partialSegmentPath);
+                }
             }
         }
 
@@ -2222,7 +2230,7 @@ public partial class MainWindow : Window
     private void UpdateEstimates()
     {
         if (!IsInitialized || EngineCombo.SelectedItem is not EngineOption engine || ProfileCombo.SelectedItem is not IProcessingProfile profile) return;
-        var cq = int.TryParse(CqText.Text, out var parsed) ? Math.Clamp(parsed, 0, 63) : 28;
+        var cq = int.TryParse(CqText.Text, out var parsed) ? Math.Clamp(parsed, 0, 63) : 18;
         var isBeta = ReadBetaOptions().AnyEnabled;
         var betaSignature = isBeta ? ReadBetaOptions().Signature : "";
         long total = 0;

@@ -39,3 +39,19 @@ Check(frames[2].OriginalFrame == 2000 && frames[2].PilotFrame == 239, "Single-fr
 try { ComparisonPlanner.Build(new[] { (0L, 0L) }); throw new Exception("Empty sample accepted."); }
 catch (ArgumentOutOfRangeException) { }
 Console.WriteLine("COMPARISON_FRAME_ALIGNMENT=PASS: noncontiguous original offsets, concatenated pilot, odd sizes, short sample.");
+
+var jobRoot = Path.Combine(temporary, ".anime-upscale-temp");
+var successJob = Path.Combine(jobRoot, "resume-success");
+var failedJob = Path.Combine(jobRoot, "resume-failed");
+foreach (var job in new[] { successJob, failedJob })
+{
+    Directory.CreateDirectory(Path.Combine(job, "toolchain-fixture"));
+    File.WriteAllText(Path.Combine(job, "toolchain-fixture", "segment.mkv"), "recoverable-segment");
+}
+Check(JobTemporaryFiles.Cleanup(failedJob, false) is null && Directory.Exists(failedJob), "Failed/cancelled work was removed.");
+Check(JobTemporaryFiles.Cleanup(successJob, true) is null && !Directory.Exists(successJob), "Successful work was retained.");
+Check(File.ReadAllText(Path.Combine(failedJob, "toolchain-fixture", "segment.mkv")) == "recoverable-segment", "Cleanup affected another job.");
+Check(JobTemporaryFiles.Cleanup(successJob, true) is null, "Repeated cleanup failed.");
+Check(JobTemporaryFiles.Cleanup(failedJob, true) is null && !Directory.Exists(jobRoot), "Empty temporary parent was retained.");
+Check(JobTemporaryFiles.Cleanup(v1, true) is not null && Directory.Exists(v1), "Cleanup accepted a non-job directory.");
+Console.WriteLine("JOB_TEMPORARY_CLEANUP=PASS: success, failure/cancellation, sibling isolation, repeated cleanup, empty parent, path guard.");

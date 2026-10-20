@@ -2,6 +2,12 @@
 
 ## Próxima versão
 
+## 0.1.5 — 2026-10-20
+
+- Remove a pasta temporária do trabalho somente após validar e salvar o vídeo final, incluindo os blocos recuperáveis do AnimeJaNai. Preserva trabalhos com falha ou cancelados e registra falhas de limpeza no log.
+- Preserva os temporários dos testes de qualidade quando falham ou são cancelados.
+- Abre por padrão em AnimeJaNai, V3 Compact Sharp1 FP16 e CQ 18.
+
 - Corrige a leitura UTF-8 dos metadados e logs do FFprobe/FFmpeg: títulos com acentos permanecem intactos no remux e na validação final de legendas, evitando falha após processar todos os blocos.
 
 - Corrige cortes segmentados no limite de frames: seleciona os trechos por índice exato, evitando perder um frame por arredondamento temporal em vídeos CFR fracionários como 23,976 fps.
