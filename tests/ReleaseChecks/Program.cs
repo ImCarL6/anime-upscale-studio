@@ -74,3 +74,50 @@ File.WriteAllText(sessionFile, "broken-json");
 var recovered = SessionStore.Load(sessionFile)!;
 Check(recovered.ElapsedSeconds == 123 && recovered.Items.Single().InputPath == "épisode.mkv", "Session backup recovery failed.");
 Console.WriteLine("QUEUE_SESSION=PASS: atomic replacement, accumulated time, paths, queue and corrupted-primary recovery.");
+
+Check(SegmentPlanning.Seconds(70) == 60 && SegmentPlanning.Seconds(80) == 180 && SegmentPlanning.Seconds(100) == 300, "Wrong live block durations.");
+var layout = new List<SegmentCheckpoint>();
+const double fractionalFps = 24000d / 1001;
+const long totalFrames = 20003;
+var expectedStart = 0L;
+var modes = new[] { 70, 100, 80, 70, 100, 80 };
+for (var i = 0; expectedStart < totalFrames; i++)
+{
+    var mode = modes[i % modes.Length];
+    var before = layout.Select(c => (c.UsefulStartFrame, c.UsefulEndFrame)).ToArray();
+    var block = SegmentPlanning.SelectNext(layout, i, totalFrames, fractionalFps, mode, 2, i - 1);
+    Check(block.UsefulStartFrame == expectedStart, "Live replan created a gap/duplicate.");
+    var expectedLength = Math.Min(totalFrames - expectedStart, (long)Math.Round(fractionalFps * SegmentPlanning.Seconds(mode), MidpointRounding.AwayFromZero));
+    Check(block.UsefulFrameCount == expectedLength, "New profile was not applied at the next boundary.");
+    Check(before.SequenceEqual(layout.Take(i).Select(c => (c.UsefulStartFrame, c.UsefulEndFrame))), "Live replan changed completed boundaries.");
+    Check(block.PrefixOverlapFrames == (i == 0 ? 0 : 2), "Overlap was lost at a dynamic boundary.");
+    expectedStart = block.UsefulEndFrame;
+}
+Check(layout.Sum(c => c.UsefulEndFrame - c.UsefulStartFrame) == totalFrames && SegmentPlanning.ValidLayout(layout, totalFrames, 2), "Mixed layout does not cover exactly the input.");
+var serialized = System.Text.Json.JsonSerializer.Serialize(new SegmentManifest { LayoutPolicyVersion = 1, Segments = layout });
+var restoredLayout = System.Text.Json.JsonSerializer.Deserialize<SegmentManifest>(serialized)!;
+Check(SegmentPlanning.ValidLayout(restoredLayout.Segments, totalFrames, 2), "Mixed layout was lost on restart.");
+// A fixed 60-second legacy plan can retain cached blocks, then grow its remaining blocks.
+var legacy = new List<SegmentCheckpoint>();
+for (var i = 0; i < 10; i++)
+{
+    var b = SegmentPlanning.Create(i, i * 1440, 14400, 1440, 2);
+    legacy.Add(new() { Index = i, UsefulStartFrame = b.UsefulStartFrame, UsefulEndFrame = b.UsefulEndFrame, SourceStartFrame = b.SourceStartFrame, SourceEndFrame = b.SourceEndFrame });
+}
+var cached = SegmentPlanning.SelectNext(legacy, 0, 14400, 24, 100, 2, 2);
+Check(cached.UsefulEndFrame == 1440 && legacy.Count == 10, "Cached legacy block was expanded.");
+var repair = SegmentPlanning.SelectNext(legacy, 1, 14400, 24, 100, 2, 2);
+Check(repair.UsefulStartFrame == 1440 && repair.UsefulEndFrame == 2880, "Repair invalidated later cached boundaries.");
+var grown = SegmentPlanning.SelectNext(legacy, 3, 14400, 24, 100, 2, 2);
+Check(grown.UsefulStartFrame == 4320 && grown.UsefulEndFrame == 11520 && legacy.Count == 4, "Unprocessed legacy tail was not replanned to five minutes.");
+var retried = SegmentPlanning.SelectNext(legacy, 3, 14400, 24, 70, 2, 2);
+Check(retried.UsefulStartFrame == 4320 && retried.UsefulEndFrame == 5760, "Unfinished block did not adapt safely after restart.");
+var broken = legacy.Select(c => new SegmentCheckpoint { Index = c.Index, UsefulStartFrame = c.UsefulStartFrame, UsefulEndFrame = c.UsefulEndFrame, SourceStartFrame = c.SourceStartFrame, SourceEndFrame = c.SourceEndFrame }).ToList();
+broken[1].UsefulStartFrame++;
+Check(!SegmentPlanning.ValidLayout(broken, 14400, 2), "A missing frame was accepted.");
+try { SegmentPlanning.SelectNext(broken, 1, 14400, 24, 80, 2, 2); throw new Exception("Broken recovery was accepted."); }
+catch (InvalidOperationException) { }
+Check(SegmentPlanning.ValidLayout([], 1, 2), "Fresh plan was rejected.");
+var oneFrame = SegmentPlanning.SelectNext([], 0, 1, fractionalFps, 100, 2, -1);
+Check(oneFrame.UsefulFrameCount == 1 && oneFrame.SourceFrameCount == 1, "Short final segment is invalid.");
+Console.WriteLine("DYNAMIC_SEGMENTS=PASS: 1/3/5 minutes, fractional CFR, both mode directions, exact coverage and overlaps, immutable prefix, persisted mixed layout, legacy cache/repair, pending retry and invalid-layout rejection.");

@@ -21,6 +21,7 @@ namespace Anime4KEncoder;
 public partial class MainWindow : Window
 {
     private const int SegmentedPipelineVersion = 1;
+    // Retain the 0.1.6 cache namespace/fingerprint: block duration is scheduling, not video quality.
     private const int AnimeJanaiSegmentSeconds = 60;
     private const int AnimeJanaiOverlapFrames = 2;
     private const int PilotPipelineVersion = 1;
@@ -241,7 +242,7 @@ public partial class MainWindow : Window
         StartButton.IsEnabled = ready;
         PilotButton.IsEnabled = ready;
         FooterText.Text = ready
-            ? "AnimeJaNai usa blocos recuperáveis de 1 min isolados por fingerprint da toolchain; o original nunca é alterado."
+            ? "AnimeJaNai usa blocos dinâmicos de 1/3/5 min isolados por fingerprint da toolchain; o original nunca é alterado."
             : $"Projeto: {_root}";
     }
 
@@ -256,7 +257,7 @@ public partial class MainWindow : Window
             ProfileCombo.SelectedIndex = _animeJanaiPresets.FindIndex(p => p.Code == "V3.1-Balanced-Sharp1");
             ConcurrencyCombo.SelectedIndex = 0;
             ConcurrencyCombo.IsEnabled = false;
-            CompatibilitySummaryText.Text = "TensorRT → blocos recuperáveis de 1 min → AV1 10-bit. Áudio, legendas, capítulos e anexos vêm do original no remux final.";
+            CompatibilitySummaryText.Text = "TensorRT → blocos dinâmicos de 1/3/5 min → AV1 10-bit. Áudio, legendas, capítulos e anexos vêm do original no remux final.";
         }
         else
         {
@@ -1054,7 +1055,7 @@ public partial class MainWindow : Window
                 settings.IsBeta,
                 EffectiveBetaSignature(settings),
                 useSegmentedAnimeJanai ? SegmentedPipelineVersion : 0,
-                useSegmentedAnimeJanai ? AnimeJanaiSegmentSeconds : 0) { ResourcePercent = _resourceModeChangedDuringRun ? -1 : settings.ResourcePercent });
+                0) { ResourcePercent = _resourceModeChangedDuringRun ? -1 : settings.ResourcePercent });
 
             await Dispatcher.InvokeAsync(() =>
             {
@@ -1217,31 +1218,45 @@ public partial class MainWindow : Window
         var toolchain = await ComputeToolchainSnapshotAsync(settings, cancellationToken);
         var cacheDirectory = Path.Combine(workDirectory, "toolchain-" + toolchain.Hash[..16].ToLowerInvariant());
         Directory.CreateDirectory(cacheDirectory);
-        var framesPerSegment = Math.Max(1L, (long)Math.Round(source.AverageFrameRate * AnimeJanaiSegmentSeconds, MidpointRounding.AwayFromZero));
-        var segments = BuildSegmentPlan(source.VideoPackets, framesPerSegment, AnimeJanaiOverlapFrames);
         var manifestPath = Path.Combine(cacheDirectory, "manifest.json");
-        var manifest = LoadOrCreateSegmentManifest(manifestPath, item, settings, source, segments, toolchain.Hash);
-
+        var manifest = LoadOrCreateSegmentManifest(manifestPath, item, settings, source, toolchain.Hash);
+        var lastCachedIndex = manifest.Segments.FindLastIndex(checkpoint => File.Exists(Path.Combine(cacheDirectory, SegmentFileName(checkpoint.Index))));
+        // Never adopt orphan files whose frame boundaries cannot be established.
+        if (Directory.EnumerateFiles(cacheDirectory, "segment-*.mkv")
+            .Where(file => !file.EndsWith(".partial.mkv", StringComparison.OrdinalIgnoreCase)).Any(file =>
+            !manifest.Segments.Any(checkpoint => Path.GetFileName(file) == SegmentFileName(checkpoint.Index))))
+            throw new InvalidOperationException("Há blocos sem plano de recuperação; cache preservado para inspeção.");
+        var segments = new List<AnimeJanaiSegmentPlan>();
         AppendLog(logPath,
             $"\n[{DateTime.Now:O}] AnimeJaNai segmentado recuperável\n" +
             $"Entrada={item.InputPath}\nFPS={source.AverageFrameRate:0.########}\nFrames={source.VideoPackets}\n" +
-            $"Blocos={segments.Count}\nFramesPorBloco={framesPerSegment}\nSobreposição={AnimeJanaiOverlapFrames} frames por borda\n" +
-            $"FingerprintToolchain={toolchain.Hash}\nComponentes={toolchain.Components.Count}\n" +
-            $"Cache={cacheDirectory}\n");
+            $"Blocos dinâmicos: econômico=60s; equilibrado=180s; máximo=300s. Sobreposição={AnimeJanaiOverlapFrames} frames por borda\n" +
+            $"FingerprintToolchain={toolchain.Hash}\nComponentes={toolchain.Components.Count}\nCache={cacheDirectory}\n");
 
         const double segmentProgressTotal = 94;
-        var segmentProgressSpan = segmentProgressTotal / segments.Count;
-        for (var index = 0; index < segments.Count; index++)
+        long nextFrame = 0;
+        for (var index = 0; nextFrame < source.VideoPackets; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await WaitForResourceReserveAsync(cancellationToken, false);
-            var segment = segments[index];
+            var mode = ReadResourcePercent();
+            var segment = SegmentPlanning.SelectNext(manifest.Segments, index, source.VideoPackets,
+                source.AverageFrameRate, mode, AnimeJanaiOverlapFrames, lastCachedIndex);
+            manifest.LayoutPolicyVersion = 1;
+            SaveSegmentManifest(manifestPath, manifest);
+            segments.Add(segment);
+            nextFrame = segment.UsefulEndFrame;
+            // The denominator is only an estimate; progress uses absolute source frames.
+            var currentFrames = Math.Max(1L, (long)Math.Round(source.AverageFrameRate * SegmentPlanning.Seconds(mode), MidpointRounding.AwayFromZero));
+            var estimatedSegmentCount = Math.Max(lastCachedIndex + 1, index + 1 + (int)Math.Ceiling((source.VideoPackets - nextFrame) / (double)currentFrames));
+            var segmentProgressSpan = segmentProgressTotal * segment.UsefulFrameCount / source.VideoPackets;
+            AppendLog(logPath, $"\nPlanejado bloco {index + 1}: frames [{segment.UsefulStartFrame},{segment.UsefulEndFrame}); modo={mode}; próximo alvo={SegmentPlanning.Seconds(mode)}s; duração={segment.UsefulFrameCount / source.AverageFrameRate:0.###}s.\n");
             var checkpoint = manifest.Segments[index];
             var completedPath = Path.Combine(cacheDirectory, SegmentFileName(segment.Index));
             var partialSegmentPath = completedPath + ".partial.mkv";
             var sourceSegmentPath = Path.Combine(cacheDirectory, $"source-{segment.Index + 1:0000}.mkv");
             var sourcePartialPath = sourceSegmentPath + ".partial.mkv";
-            var progressStart = index * segmentProgressSpan;
+            var progressStart = segmentProgressTotal * segment.UsefulStartFrame / source.VideoPackets;
 
             if (File.Exists(completedPath))
             {
@@ -1252,10 +1267,10 @@ public partial class MainWindow : Window
                     checkpoint.Completed = true;
                     checkpoint.CompletedAt = File.GetLastWriteTimeUtc(completedPath);
                     SaveSegmentManifest(manifestPath, manifest);
-                    AppendLog(logPath, $"\nBloco {index + 1}/{segments.Count} recuperado do cache e validado.\n");
+                    AppendLog(logPath, $"\nBloco {index + 1}/{estimatedSegmentCount} recuperado do cache e validado.\n");
                     await Dispatcher.InvokeAsync(() =>
                     {
-                        item.Stage = $"Bloco {index + 1}/{segments.Count} recuperado";
+                        item.Stage = $"Bloco {index + 1}/{estimatedSegmentCount} recuperado";
                         item.Progress = Math.Min(99.4, progressStart + segmentProgressSpan);
                         item.Processed = TimeSpan.FromSeconds(item.Duration.TotalSeconds * item.Progress / 100);
                         item.UpdateProgress();
@@ -1281,7 +1296,7 @@ public partial class MainWindow : Window
                 await Dispatcher.InvokeAsync(() =>
                 {
                     item.Status = "Processando";
-                    item.Stage = $"Preparando bloco {index + 1}/{segments.Count}";
+                    item.Stage = $"Preparando bloco {index + 1}/{estimatedSegmentCount}";
                 });
 
                 var sourceDuration = TimeSpan.FromSeconds(segment.SourceFrameCount / source.AverageFrameRate);
@@ -1299,7 +1314,7 @@ public partial class MainWindow : Window
                     logPath,
                     cancellationToken,
                     sourceDuration,
-                    $"Preparando bloco {index + 1}/{segments.Count}");
+                    $"Preparando bloco {index + 1}/{estimatedSegmentCount}");
 
                 var prepared = await ProbeMediaStructureAsync(sourcePartialPath, true, cancellationToken);
                 if (prepared.VideoPackets != segment.SourceFrameCount)
@@ -1313,7 +1328,7 @@ public partial class MainWindow : Window
                     partialSegmentPath,
                     configPath,
                     segment,
-                    segments.Count,
+                    estimatedSegmentCount,
                     progressStart + segmentProgressSpan * 0.12,
                     segmentProgressSpan * 0.88,
                     source.AverageFrameRate,
@@ -1328,7 +1343,7 @@ public partial class MainWindow : Window
                 checkpoint.CompletedAt = DateTimeOffset.Now;
                 checkpoint.OutputBytes = new FileInfo(completedPath).Length;
                 SaveSegmentManifest(manifestPath, manifest);
-                AppendLog(logPath, $"\nBloco {index + 1}/{segments.Count} validado: {segment.UsefulFrameCount} frames, {FormatBytes(checkpoint.OutputBytes)}.\n");
+                AppendLog(logPath, $"\nBloco {index + 1}/{estimatedSegmentCount} validado: {segment.UsefulFrameCount} frames, {FormatBytes(checkpoint.OutputBytes)}.\n");
             }
             finally
             {
@@ -2986,7 +3001,6 @@ public partial class MainWindow : Window
         EncodeItem item,
         JobSettings settings,
         MediaStructure source,
-        IReadOnlyList<AnimeJanaiSegmentPlan> segments,
         string toolchainFingerprint)
     {
         SegmentManifest? manifest = null;
@@ -3012,17 +3026,14 @@ public partial class MainWindow : Window
             manifest.BetaSignature == EffectiveBetaSignature(settings) &&
             manifest.ToolchainFingerprint == toolchainFingerprint &&
             manifest.SegmentSeconds == AnimeJanaiSegmentSeconds &&
+            manifest.LayoutPolicyVersion is 0 or 1 &&
             manifest.OverlapFrames == AnimeJanaiOverlapFrames &&
-            manifest.Segments.Count == segments.Count &&
-            manifest.Segments.Zip(segments).All(pair =>
-                pair.First.Index == pair.Second.Index &&
-                pair.First.UsefulStartFrame == pair.Second.UsefulStartFrame &&
-                pair.First.UsefulEndFrame == pair.Second.UsefulEndFrame &&
-                pair.First.SourceStartFrame == pair.Second.SourceStartFrame &&
-                pair.First.SourceEndFrame == pair.Second.SourceEndFrame);
+            SegmentPlanning.ValidLayout(manifest.Segments, source.VideoPackets, AnimeJanaiOverlapFrames);
 
         if (!compatible)
         {
+            if (File.Exists(path))
+                throw new InvalidOperationException("O plano de recuperação não corresponde à entrada ou aos parâmetros atuais; cache preservado.");
             manifest = new SegmentManifest
             {
                 Version = SegmentedPipelineVersion,
@@ -3040,14 +3051,8 @@ public partial class MainWindow : Window
                 SegmentSeconds = AnimeJanaiSegmentSeconds,
                 OverlapFrames = AnimeJanaiOverlapFrames,
                 CreatedAt = DateTimeOffset.Now,
-                Segments = segments.Select(s => new SegmentCheckpoint
-                {
-                    Index = s.Index,
-                    UsefulStartFrame = s.UsefulStartFrame,
-                    UsefulEndFrame = s.UsefulEndFrame,
-                    SourceStartFrame = s.SourceStartFrame,
-                    SourceEndFrame = s.SourceEndFrame
-                }).ToList()
+                LayoutPolicyVersion = 1,
+                Segments = []
             };
             SaveSegmentManifest(path, manifest);
         }
@@ -3543,48 +3548,6 @@ public sealed record StreamIdentity(
 }
 public sealed record ChapterIdentity(double StartSeconds, double EndSeconds, string Title);
 public sealed record VideoTimeline(long PacketCount, double FirstPts, double LastPts, double MinimumStep, double MaximumStep);
-public sealed record AnimeJanaiSegmentPlan(
-    int Index,
-    long UsefulStartFrame,
-    long UsefulEndFrame,
-    long SourceStartFrame,
-    long SourceEndFrame,
-    long PrefixOverlapFrames)
-{
-    public long UsefulFrameCount => UsefulEndFrame - UsefulStartFrame;
-    public long SourceFrameCount => SourceEndFrame - SourceStartFrame;
-}
-public sealed class SegmentManifest
-{
-    public int Version { get; set; }
-    public string SourcePath { get; set; } = "";
-    public long SourceLength { get; set; }
-    public long SourceLastWriteUtcTicks { get; set; }
-    public long TotalFrames { get; set; }
-    public double FrameRate { get; set; }
-    public string ProfileCode { get; set; } = "";
-    public string ModelName { get; set; } = "";
-    public int Cq { get; set; }
-    public bool IsBeta { get; set; }
-    public string BetaSignature { get; set; } = "";
-    public string ToolchainFingerprint { get; set; } = "";
-    public int SegmentSeconds { get; set; }
-    public int OverlapFrames { get; set; }
-    public DateTimeOffset CreatedAt { get; set; }
-    public List<SegmentCheckpoint> Segments { get; set; } = [];
-}
-public sealed class SegmentCheckpoint
-{
-    public int Index { get; set; }
-    public long UsefulStartFrame { get; set; }
-    public long UsefulEndFrame { get; set; }
-    public long SourceStartFrame { get; set; }
-    public long SourceEndFrame { get; set; }
-    public bool Completed { get; set; }
-    public DateTimeOffset? CompletedAt { get; set; }
-    public long OutputBytes { get; set; }
-}
-
 public sealed class EncodeItem : INotifyPropertyChanged
 {
     public string InputPath { get; }

@@ -1,5 +1,20 @@
 # Testes
 
+## Blocos dinâmicos (0.1.7)
+
+`ReleaseChecks` cobre 1/3/5 minutos, CFR fracionário, cobertura exata sem lacunas ou
+sobreposição útil, mudança nos dois sentidos, preservação do prefixo, plano misto
+persistido e adaptação de caches fixos da 0.1.6. Layouts inconsistentes são rejeitados.
+
+`Test-DynamicSegments.ps1 -Package <runtime-isolado>` gera uma fixture CFR de oito
+minutos com 480 frames. Troca o seletor nas fronteiras para selecionar um bloco de
+cinco minutos, um de um minuto e uma cauda no modo equilibrado. Libera o ritmo após
+a seleção de cada fronteira para não transformar o teste em benchmark do modo
+reduzido. Exige validação final de frames, timestamps e áudio e limpeza após sucesso.
+`-CancelAndResume` cancela após os dois primeiros blocos, simula um parcial inacabado
+e exige retomada sem reescrever os blocos concluídos. É um teste de pipeline com GPU,
+não um benchmark de episódio real.
+
 ## Controle ao vivo (0.1.6)
 
 `ResourceChecks` recebe opcionalmente o caminho do FFmpeg: testa CPU 35→75→máximo→35

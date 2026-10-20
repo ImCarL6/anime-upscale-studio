@@ -119,15 +119,15 @@
                 <StackPanel Grid.Row="1" Grid.ColumnSpan="5" Margin="0,12,0,0">
                     <WrapPanel>
                         <TextBlock Text="Uso do PC" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                        <ComboBox x:Name="ResourceModeCombo" Width="240" SelectedIndex="1" SelectionChanged="ResourceMode_Changed"
+                        <ComboBox x:Name="ResourceModeCombo" Width="290" SelectedIndex="1" SelectionChanged="ResourceMode_Changed"
                                   ToolTip="Cadencia o AnimeJaNai por blocos e espera por reserva de memória. GPU em prioridade baixa; sem cota rígida de VRAM.">
-                            <ComboBoxItem Content="Trabalhar e assistir"/>
-                            <ComboBoxItem Content="Equilibrado (padrão)"/>
-                            <ComboBoxItem Content="Desempenho máximo"/>
+                            <ComboBoxItem Content="Trabalhar e assistir • blocos de 1 min"/>
+                            <ComboBoxItem Content="Equilibrado (padrão) • blocos de 3 min"/>
+                            <ComboBoxItem Content="Desempenho máximo • blocos de 5 min"/>
                         </ComboBox>
                         <Button x:Name="MaximumPerformanceButton" Content="⚡ Ativar desempenho máximo" Background="#886017" FontWeight="SemiBold" Margin="12,0,0,0" Click="MaximumPerformance_Click"
                                 ToolTip="Libera os limites de desempenho agora. A proteção de memória continua ativa."/>
-                        <TextBlock Text="Troque durante o processamento: CPU e ritmo ao vivo. A proteção de memória permanece ativa." TextWrapping="Wrap"
+                        <TextBlock Text="Troque durante o processamento: CPU e ritmo agora; tamanho do próximo bloco conforme o modo." TextWrapping="Wrap"
                                    Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="12,0,0,0"/>
                     </WrapPanel>
                     <TextBlock x:Name="ResourceStatusText" Foreground="#8FE0AE" TextWrapping="Wrap" FontSize="11" Margin="0,5,0,0"/>

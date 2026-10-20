@@ -2,6 +2,10 @@
 
 ## Próxima versão
 
+## 0.1.7 — 2026-10-20
+
+- Ajusta dinamicamente os próximos blocos do AnimeJaNai ao modo selecionado: 1 minuto em Trabalhar e assistir, 3 minutos em Equilibrado e 5 minutos em Desempenho máximo. Preserva o bloco atual, as fronteiras dos blocos recuperáveis e a cobertura exata de frames; permite retomar planos mistos e caches fixos da 0.1.6. CPU e cadência continuam ajustáveis durante o bloco.
+
 ## 0.1.6 — 2026-10-20
 
 - Valida a entrada antes do upscale: leitura integral dos pacotes, duração real e decodificação de vídeo e todos os áudios; bloqueia arquivo truncado mesmo quando o leitor retorna código zero. Legendas que terminam após o vídeo são aceitas quando explicam a duração anunciada.

@@ -24,7 +24,8 @@ A primeira execução pode levar minutos preparando a engine na sua GPU.
 - A leitura completa de vídeo e áudio verifica a integridade antes do upscale.
   Arquivos incompletos são recusados sem apagar o original.
 - **Equilibrado** é o modo inicial. Troque o consumo durante a execução ou use
-  **Desempenho máximo**. Veja [controle de recursos](docs/RESOURCE-PROTECTION.md).
+  **Desempenho máximo**. Os próximos blocos acompanham o modo: 1, 3 ou 5 minutos,
+  preservando os que já foram concluídos. Veja [controle de recursos](docs/RESOURCE-PROTECTION.md).
 
 - Um aviso explica a preparação do TensorRT enquanto ela acontece, inclusive
   quando a porcentagem permanece parada no primeiro uso.

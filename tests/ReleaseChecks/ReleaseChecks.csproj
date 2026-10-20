@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/Anime4KEncoder/SegmentPlanning.cs" Link="SegmentPlanning.cs" />
+    <Compile Include="../../src/Anime4KEncoder/SegmentManifest.cs" Link="SegmentManifest.cs" />
     <Compile Include="../../src/Anime4KEncoder/InputIntegrity.cs" Link="InputIntegrity.cs" />
     <Compile Include="../../src/Anime4KEncoder/SessionStore.cs" Link="SessionStore.cs" />
     <Compile Include="../../src/Anime4KEncoder/MediaInfo.cs" Link="MediaInfo.cs" />

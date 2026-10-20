@@ -121,13 +121,13 @@ public partial class MainWindow
         {
             _resourceModeChangedDuringRun = true;
             foreach (var item in Items.Where(item => item.IsRunning && !string.IsNullOrEmpty(item.LogPath)))
-                AppendLog(item.LogPath, $"\nTroca ao vivo: CPU={ResourceProtection.CpuPercent(ReadResourcePercent())}%, ritmo={CurrentPace():0.###}x.\n");
+                AppendLog(item.LogPath, $"\nTroca ao vivo: CPU={ResourceProtection.CpuPercent(ReadResourcePercent())}%, ritmo={CurrentPace():0.###}x; próximo bloco={SegmentPlanning.Seconds(ReadResourcePercent()) / 60} min.\n");
         }
         if (ReadResourcePercent() < 100) ConcurrencyCombo.SelectedIndex = 0;
         ConcurrencyCombo.IsEnabled = false;
         ResourceStatusText.Text = ReadResourcePercent() < 100
-            ? "Controle ao vivo • 1 vídeo por vez • ritmo reduzido • espera por reserva • até 2 retomadas automáticas"
-            : "Desempenho liberado • proteção de memória e retomada continuam ativas";
+            ? $"Próximo bloco: {SegmentPlanning.Seconds(ReadResourcePercent()) / 60} min • ritmo ao vivo • espera por reserva • até 2 retomadas automáticas"
+            : "Próximo bloco: 5 min • desempenho liberado • proteção de memória e retomada continuam ativas";
         try
         {
             var path = Path.Combine(_dataRoot, "data", "resource-settings.json");
@@ -153,7 +153,7 @@ public partial class MainWindow
                 var gpuText = snapshot.Gpus.Count > 0
                     ? string.Join(" / ", snapshot.Gpus.Select(gpu => $"VRAM {100d * gpu.Used / gpu.Total:0}%"))
                     : "VRAM indisponível";
-                ResourceStatusText.Text = $"RAM livre {FormatBytes((long)snapshot.AvailableRam)} • compromisso livre {FormatBytes((long)snapshot.AvailableCommit)} • {gpuText} • CPU até {ResourceProtection.CpuPercent(ReadResourcePercent())}% • {(_livePacing is { IsDisposed: false } live ? (live.AppliedRate == CurrentPace() ? "ritmo aplicado" : live.Error ?? "aplicando ritmo…") : "preparando etapa")} • {note}";
+                ResourceStatusText.Text = $"RAM livre {FormatBytes((long)snapshot.AvailableRam)} • compromisso livre {FormatBytes((long)snapshot.AvailableCommit)} • {gpuText} • próximo bloco {SegmentPlanning.Seconds(ReadResourcePercent()) / 60} min • CPU até {ResourceProtection.CpuPercent(ReadResourcePercent())}% • {(_livePacing is { IsDisposed: false } live ? (live.AppliedRate == CurrentPace() ? "ritmo aplicado" : live.Error ?? "aplicando ritmo…") : "preparando etapa")} • {note}";
             });
         });
     }
