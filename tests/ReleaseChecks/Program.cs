@@ -64,6 +64,38 @@ timeline.Validate(15); // subtitles may legitimately extend beyond A/V
 try { timeline.Validate(240); throw new Exception("Missing tail accepted."); } catch (InvalidOperationException) { }
 try { InputTimeline.ValidateReader(0, "File ended prematurely"); throw new Exception("Successful exit hid truncation."); } catch (InvalidOperationException) { }
 InputTimeline.ValidateReader(0, "");
+const string equalDts = "[null @ 00000193f17300c0] Application provided invalid, non monotonically increasing dts to muxer in stream 0: 32512 >= 32512";
+InputTimeline.ValidateReader(0, equalDts + "\r\n" + equalDts, true);
+foreach (var (code, diagnostic, allow) in new[] {
+    (1, equalDts, true), (0, equalDts, false),
+    (0, equalDts.Replace("32512 >= 32512", "32513 >= 32512"), true),
+    (0, equalDts.Replace("[null @", "[matroska @"), true),
+    (0, equalDts + "\nFile ended prematurely", true),
+    (0, equalDts + "\nError while decoding stream #0:0: Invalid data", true) })
+{
+    try { InputTimeline.ValidateReader(code, diagnostic, allow); throw new Exception("Fatal diagnostic accepted: " + diagnostic); }
+    catch (InvalidOperationException) { }
+}
+var visited = new List<int>();
+var failedItems = new List<int>();
+foreach (var index in new[] { 0, 1, 2 })
+    await QueueExecution.RunItemAsync(() => {
+        visited.Add(index);
+        return index == 1 ? Task.FromException(new IOException("Broken input")) : Task.CompletedTask;
+    }, _ => failedItems.Add(index), CancellationToken.None);
+Check(visited.SequenceEqual(new[] { 0, 1, 2 }) && failedItems.SequenceEqual(new[] { 1 }), "File failure stopped queue or repeated item.");
+foreach (var stop in new Exception[] { new OperationCanceledException(), new ResourcePauseException("Memory reserve exhausted") })
+{
+    try { await QueueExecution.RunItemAsync(() => Task.FromException(stop), _ => throw new Exception("Stop swallowed"), CancellationToken.None); throw new Exception("Queue stop ignored"); }
+    catch (Exception ex) when (ReferenceEquals(ex, stop)) { }
+}
+using (var cancelled = new CancellationTokenSource())
+{
+    cancelled.Cancel();
+    try { await QueueExecution.RunItemAsync(() => throw new Exception("Cancelled item started"), _ => { }, cancelled.Token); throw new Exception("Cancellation ignored"); }
+    catch (OperationCanceledException) { }
+}
+Console.WriteLine("TIMESTAMP_AND_QUEUE_FAILURES=PASS: equal-DTS only, fatal diagnostics retained, next item continues, cancellation/resource pauses propagate.");
 Console.WriteLine("INPUT_INTEGRITY=PASS: successful exit with truncation rejected, duration mismatch rejected, extended subtitles accepted.");
 var sessionFile = Path.Combine(temporary, "session", "queue-session.json");
 SessionStore.Save(sessionFile, new QueueSession { OutputDirectory = "output á", InputDirectory = "input", ElapsedSeconds = 123,

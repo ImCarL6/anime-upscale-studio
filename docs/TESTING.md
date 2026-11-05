@@ -1,5 +1,14 @@
 # Testes
 
+## Timestamps e isolamento de falhas na fila
+
+`ReleaseChecks` aceita DTS iguais apenas no muxer `null` de uma decodificação com
+código zero. Rejeita timestamps retrocedendo, outros muxers, truncamento e erros
+de decodificação, inclusive misturados com o aviso aceito. Exercita a execução
+sequencial com falha no item intermediário e conclusão do seguinte, sem repetir
+o item que falhou; cancelamento e pausa por recursos continuam propagados.
+São testes internos; não substituem um episódio completo na interface instalada.
+
 ## Blocos dinâmicos (0.1.7)
 
 `ReleaseChecks` cobre 1/3/5 minutos, CFR fracionário, cobertura exata sem lacunas ou

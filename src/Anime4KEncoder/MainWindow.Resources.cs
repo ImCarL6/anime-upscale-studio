@@ -30,7 +30,7 @@ public partial class MainWindow
             ResourceStatusText.Text = $"Aguardando reserva ({started.Elapsed:mm\\:ss}/05:00) • RAM livre {FormatBytes((long)snapshot.AvailableRam)} • compromisso livre {FormatBytes((long)snapshot.AvailableCommit)} • pode cancelar";
             await Task.Delay(1000, token);
         }
-        throw new InvalidOperationException("Não houve reserva suficiente em 5 minutos. A fila foi pausada, com os blocos preservados.");
+        throw new ResourcePauseException("Não houve reserva suficiente em 5 minutos. A fila foi pausada, com os blocos preservados.");
     }
 
     private async Task EncodeInBackgroundAsync(EncodeItem item, JobSettings settings, CancellationToken token)
@@ -52,12 +52,12 @@ public partial class MainWindow
                 var recoverable = _resourceStopReason is not null || _allocationFailed;
                 if (!recoverable) return;
                 if (settings.Engine != "animejanai" || !string.IsNullOrWhiteSpace(settings.AdvancedFfmpegCommand))
-                    throw new InvalidOperationException("A retomada automática exige AnimeJaNai por blocos. Arquivos preservados.");
+                    throw new ResourcePauseException("A retomada automática exige AnimeJaNai por blocos. Arquivos preservados.");
                 if (!_backgroundRecovery.TryRetry(recoverable, token.IsCancellationRequested))
                 {
                     item.Status = "Falhou";
                     item.Error = "Reserva insuficiente após duas retomadas automáticas. Blocos preservados; fila pausada para evitar repetição.";
-                    throw new InvalidOperationException(item.Error);
+                    throw new ResourcePauseException(item.Error);
                 }
                 AppendLog(item.LogPath, $"\nRetomada automática {_backgroundRecovery.Retries}/2; ritmo={_backgroundRecovery.ReadRate(settings.ResourcePercent):0.###}x; {_resourceStopReason ?? "falha de alocação"}\n");
                 item.Stage = $"Aguardando retomada {_backgroundRecovery.Retries}/2";
@@ -186,7 +186,13 @@ public partial class MainWindow
         while ((count = await reader.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
         {
             output.Append(buffer, 0, count);
-            if (output.Length > 60000) output.Remove(0, output.Length - 60000);
+            if (output.Length > 60000)
+            {
+                // Retain whole diagnostic lines so classification never sees a cut message.
+                var end = output.ToString().IndexOf('\n', output.Length - 60000);
+                if (end >= 0) output.Remove(0, end + 1);
+                else output.Remove(0, output.Length - 60000);
+            }
         }
         return output.ToString();
     }

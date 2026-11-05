@@ -2,6 +2,9 @@
 
 ## Próxima versão
 
+- Aceita avisos de DTS iguais somente no muxer descartável da decodificação de entrada bem-sucedida; mantém bloqueios de truncamento, DTS retrocedendo, falha de leitura e divergência de frames.
+- Isola falhas por arquivo e continua a fila, preservando cancelamento e pausas por proteção de recursos. Resume os erros ao final sem despejar o log inteiro na janela.
+
 ## 0.1.7 — 2026-10-20
 
 - Ajusta dinamicamente os próximos blocos do AnimeJaNai ao modo selecionado: 1 minuto em Trabalhar e assistir, 3 minutos em Equilibrado e 5 minutos em Desempenho máximo. Preserva o bloco atual, as fronteiras dos blocos recuperáveis e a cobertura exata de frames; permite retomar planos mistos e caches fixos da 0.1.6. CPU e cadência continuam ajustáveis durante o bloco.

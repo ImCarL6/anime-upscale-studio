@@ -163,7 +163,21 @@ public partial class MainWindow
                 return;
             }
             attempted.Add(next);
-            await EncodeInBackgroundAsync(next, settings, token);
+            await QueueExecution.RunItemAsync(() => EncodeInBackgroundAsync(next, settings, token), ex =>
+            {
+                next.Status = "Falhou";
+                next.Error = FriendlyError(ex.Message);
+                next.IsRunning = false;
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(next.LogPath)) next.LogPath = CreateLogPath(Path.GetFileNameWithoutExtension(next.InputPath), Guid.NewGuid().ToString("N"));
+                    AppendLog(next.LogPath, $"\nFalha no item; seguindo para o próximo arquivo.\n{ex}\n");
+                }
+                catch (Exception logError) when (logError is IOException or UnauthorizedAccessException or ArgumentException)
+                {
+                    next.Error += "\nNão foi possível gravar o log: " + logError.Message;
+                }
+            }, token);
             SaveSession();
         }
     }

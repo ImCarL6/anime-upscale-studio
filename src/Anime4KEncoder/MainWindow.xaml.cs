@@ -607,8 +607,9 @@ public partial class MainWindow : Window
             var failures = Items.Where(i => i.Status == "Falhou").ToArray();
             if (failures.Length > 0)
             {
-                var details = string.Join("\n\n", failures.Select(i => $"{i.FileName}\nEtapa: {i.Stage}\n{i.Error}\nLog: {i.LogPath}"));
-                if (details.Length > 7000) details = details[..7000] + "\n…";
+                var details = $"{failures.Length} arquivo(s) falharam. Os demais itens foram processados, salvo cancelamento ou pausa por recursos.\n\n" +
+                    string.Join("\n\n", failures.Take(5).Select(i => $"{i.FileName}\n{(i.Error ?? "Falha no processamento").Split('\n')[0][..Math.Min(180, (i.Error ?? "Falha no processamento").Split('\n')[0].Length)]}\nLog: {i.LogPath}"));
+                if (failures.Length > 5) details += "\n\nConsulte os demais erros na fila.";
                 MessageBox.Show(details, "Falha no processamento", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

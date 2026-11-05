@@ -33,11 +33,22 @@ internal sealed class InputTimeline
             throw new InvalidOperationException($"Entrada possivelmente incompleta: o MKV anuncia {TimeSpan.FromSeconds(declaredSeconds):hh\\:mm\\:ss}, mas os dados terminam em {TimeSpan.FromSeconds(AudioVideoEnd):hh\\:mm\\:ss}. Verifique a cópia original.");
     }
 
-    internal static void ValidateReader(int exitCode, string errors)
+    internal static void ValidateReader(int exitCode, string errors, bool allowNullMuxerEqualDts = false)
     {
+        if (allowNullMuxerEqualDts && exitCode == 0)
+            errors = string.Join("\n", errors.Split('\n').Where(line => !IsEqualDtsNotice(line.Trim())));
         if (exitCode == 0 && string.IsNullOrWhiteSpace(errors)) return;
         if (errors.Contains("File ended prematurely", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Arquivo incompleto: o leitor encontrou um final prematuro. Obtenha uma cópia íntegra antes do upscale.");
         throw new InvalidOperationException("Falha de integridade na mídia: " + (string.IsNullOrWhiteSpace(errors) ? $"código {exitCode}" : errors.Trim()[..Math.Min(2000, errors.Trim().Length)]));
+    }
+
+    private static bool IsEqualDtsNotice(string line)
+    {
+        // Only the discard-output muxer may report harmless timestamp quantization.
+        // Backward timestamps, other muxers and all decoding errors remain fatal.
+        var match = System.Text.RegularExpressions.Regex.Match(line,
+            @"^\[null @ [0-9a-fA-F]+\] Application provided invalid, non monotonically increasing dts to muxer in stream \d+: (-?\d+) >= (-?\d+)$");
+        return match.Success && match.Groups[1].Value == match.Groups[2].Value;
     }
 }

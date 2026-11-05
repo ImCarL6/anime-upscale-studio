@@ -47,7 +47,7 @@ public partial class MainWindow
             var decodedFrames = await output;
             var error = await errors;
             AppendLog(item.LogPath, $"\nDecodificação integral da entrada (vídeo e todos os áudios)\n{error}\nExitCode={process.ExitCode}\n");
-            InputTimeline.ValidateReader(process.ExitCode, error);
+            InputTimeline.ValidateReader(process.ExitCode, error, allowNullMuxerEqualDts: true);
             if (decodedFrames != timeline.VideoPackets)
                 throw new InvalidOperationException($"A entrada produziu {decodedFrames} frames decodificados, mas contém {timeline.VideoPackets} pacotes de vídeo. Verifique o arquivo antes do upscale.");
         }
