@@ -105,6 +105,7 @@ public partial class MainWindow
 
     private void ResourceMode_Changed(object sender, SelectionChangedEventArgs e)
     {
+        SyncResourceSegments();
         if (!_resourceControlsReady) return;
         MaximumPerformanceButton.Content = ReadResourcePercent() == 100 ? "⚡ Desempenho máximo ativo" : "⚡ Ativar desempenho máximo";
         try
@@ -150,6 +151,7 @@ public partial class MainWindow
             _lastResourceSnapshot = snapshot;
             Dispatcher.BeginInvoke(() =>
             {
+                UpdateResourceChips(snapshot);
                 var gpuText = snapshot.Gpus.Count > 0
                     ? string.Join(" / ", snapshot.Gpus.Select(gpu => $"VRAM {100d * gpu.Used / gpu.Total:0}%"))
                     : "VRAM indisponível";

@@ -32,14 +32,25 @@ public partial class MainWindow
 
     private void QueueGrid_DragOver(object sender, DragEventArgs e)
     {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+            return;
+        }
         e.Effects = _queueCancellation is null && e.Data.GetData(QueueDragFormat) is EncodeItem item && Items.Contains(item)
             ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled = true;
     }
 
-    private void QueueGrid_Drop(object sender, DragEventArgs e)
+    private async void QueueGrid_Drop(object sender, DragEventArgs e)
     {
         e.Handled = true;
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] droppedPaths)
+        {
+            await AddDroppedFilesAsync(droppedPaths);
+            return;
+        }
         if (_queueCancellation is not null || e.Data.GetData(QueueDragFormat) is not EncodeItem item) return;
         var row = ItemsControl.ContainerFromElement(QueueGrid, e.OriginalSource as DependencyObject) as DataGridRow;
         var target = row?.Item as EncodeItem;

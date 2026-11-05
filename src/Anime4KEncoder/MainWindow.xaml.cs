@@ -100,6 +100,7 @@ public partial class MainWindow : Window
         Loaded += async (_, _) => await CheckPortableEnvironmentAsync();
         InitializeUpdates();
         InitializeSession();
+        InitializeV2Ui();
     }
 
     private static string FindProjectRoot()
@@ -296,6 +297,8 @@ public partial class MainWindow : Window
     }
     private void Settings_Changed(object sender, TextChangedEventArgs e)
     {
+        // O layout 2.0 cria campos em outra ordem; os valores iniciais são aplicados após o carregamento.
+        if (!IsInitialized) return;
         UpdateEstimates();
         UpdateOutputDiskSpace();
         UpdateAdvancedCommandPreview();
@@ -2413,6 +2416,7 @@ public partial class MainWindow : Window
 
     private void RefreshOverall()
     {
+        RefreshNowCard();
         if (_activePilotItem is { } pilot)
         {
             OverallProgress.Value = pilot.Progress;
@@ -3556,7 +3560,8 @@ public sealed class EncodeItem : INotifyPropertyChanged
     private string _outputPath = "";
     public string OutputPath { get => _outputPath; set { _outputPath = value; Notify(); Notify(nameof(CanOpenOutput)); } }
     public bool CanOpenOutput => Status == "Concluído" && !IsRunning && !string.IsNullOrWhiteSpace(OutputPath);
-    public string Error { get; set; } = "";
+    private string _error = "";
+    public string Error { get => _error; set { _error = value; Notify(); } }
     public string LogPath { get; set; } = "";
     public long InputBytes { get; private set; }
     public long InputBitRate { get; private set; }
@@ -3570,7 +3575,8 @@ public sealed class EncodeItem : INotifyPropertyChanged
     public long EstimatedOutputBytes { get => _estimatedOutputBytes; set { _estimatedOutputBytes = value; Notify(); Notify(nameof(EstimatedSizeText)); } }
     public long ActualOutputBytes { get => _actualOutputBytes; set { _actualOutputBytes = value; Notify(); Notify(nameof(ActualSizeText)); Notify(nameof(SizeComparisonText)); } }
     public double EstimatedTotalSeconds { get; set; }
-    public string EstimateBasis { get; set; } = "estimativa padrão";
+    private string _estimateBasis = "estimativa padrão";
+    public string EstimateBasis { get => _estimateBasis; set { _estimateBasis = value; Notify(); } }
     public TimeSpan Elapsed { get => _elapsed; private set { _elapsed = value; Notify(); Notify(nameof(ElapsedText)); Notify(nameof(EtaText)); } }
     public DateTimeOffset? StartedAt { get; set; }
 
@@ -3684,6 +3690,76 @@ public sealed class EncodeItem : INotifyPropertyChanged
         ? elapsed.ToString(@"hh\:mm\:ss")
         : elapsed.ToString(@"mm\:ss");
 
+    // Textos derivados usados pela fila da interface 2.0.
+    public string StatusKind => IsRunning ? "running" : Status switch
+    {
+        "Concluído" => "done",
+        "Falhou" or "Erro ao analisar" => "failed",
+        "Saída já existe" => "warning",
+        "Cancelado" => "cancelled",
+        _ => "waiting"
+    };
+    public bool ShowProgress => StatusKind == "running" || (StatusKind is "cancelled" or "failed" && Progress > 0 && Progress < 100);
+    public string StageSpeedText => string.IsNullOrWhiteSpace(Speed) ? Stage : $"{Stage} • {Speed}";
+    public string DetailText => StatusKind switch
+    {
+        "running" => ProgressText,
+        "done" => string.IsNullOrWhiteSpace(Speed) ? "Concluído" : $"Concluído • {Speed}",
+        "failed" or "warning" => string.IsNullOrWhiteSpace(Error) ? Status : $"{Status}: {Error}",
+        "cancelled" => !string.IsNullOrWhiteSpace(Stage) && Stage != Status
+            ? $"{Stage} • {Progress:0.0}%"
+            : Progress > 0 ? $"Cancelado em {Progress:0.0}%" : "Cancelado",
+        _ => string.IsNullOrWhiteSpace(Stage) || Stage == Status || Stage == "Análise" ? Status : $"{Status} • {Stage}"
+    };
+    public bool HasActualSize => ActualOutputBytes > 0;
+    public string SizeText => ActualOutputBytes > 0 ? ActualSizeText : EstimatedOutputBytes > 0 ? "~" + EstimatedSizeText : "—";
+    public string SizeToolTip => ActualOutputBytes > 0
+        ? SizeComparisonText
+        : EstimatedOutputBytes > 0 ? $"Estimativa: {EstimatedSizeText} ({EstimateBasis})" : "A estimativa aparece após a análise do arquivo.";
+    public string TimeText => StatusKind switch
+    {
+        "running" => EtaText,
+        "done" => ElapsedText,
+        "waiting" => Duration == TimeSpan.Zero || RemainingEstimateSeconds <= 0 ? "—" : "~" + EtaText,
+        _ => Elapsed > TimeSpan.Zero ? ElapsedText : "—"
+    };
+    public string TimeToolTip => StatusKind switch
+    {
+        "running" => $"Decorrido {ElapsedText} • restante {EtaText}",
+        "done" => $"Processado em {ElapsedText}",
+        "waiting" => "Tempo estimado de processamento",
+        _ => $"Tempo decorrido: {ElapsedText}"
+    };
+    public string RowToolTip
+    {
+        get
+        {
+            var text = InputPath;
+            if (!string.IsNullOrWhiteSpace(Compatibility) && Compatibility != "Aguardando") text += $"{Environment.NewLine}Compatibilidade: {Compatibility}";
+            if (!string.IsNullOrWhiteSpace(Error)) text += $"{Environment.NewLine}{Error}";
+            return text;
+        }
+    }
+
+    private static readonly HashSet<string> StateSources =
+    [
+        nameof(Status), nameof(IsRunning), nameof(Progress), nameof(Stage), nameof(Speed), nameof(Error), nameof(Compatibility),
+        nameof(EstimatedOutputBytes), nameof(ActualOutputBytes), nameof(EstimateBasis), nameof(Duration)
+    ];
+    private static readonly HashSet<string> TimeSources = [nameof(Elapsed), nameof(ElapsedText), nameof(EtaText)];
+    private static readonly string[] StateDerived =
+        [nameof(StatusKind), nameof(ShowProgress), nameof(StageSpeedText), nameof(DetailText), nameof(HasActualSize),
+         nameof(SizeText), nameof(SizeToolTip), nameof(TimeText), nameof(TimeToolTip), nameof(RowToolTip)];
+    private static readonly string[] TimeDerived = [nameof(TimeText), nameof(TimeToolTip)];
+
     public event PropertyChangedEventHandler? PropertyChanged;
-    private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    private void Notify([CallerMemberName] string? name = null)
+    {
+        var handler = PropertyChanged;
+        if (handler is null || name is null) return;
+        handler(this, new PropertyChangedEventArgs(name));
+        var derived = StateSources.Contains(name) ? StateDerived : TimeSources.Contains(name) ? TimeDerived : null;
+        if (derived is null) return;
+        foreach (var property in derived) handler(this, new PropertyChangedEventArgs(property));
+    }
 }

@@ -2,6 +2,12 @@
 
 ## Próxima versão
 
+- Interface 2.0: layout reorganizado com foco nos trabalhos. Barra superior compacta (versão, status da GPU, Uso do PC como seletor Assistir/Equilibrado/Máximo); cartão “Processando agora” com episódio, progresso, bloco, velocidade, tempos e uso de CPU/RAM/VRAM; fila com 6 colunas (ícone de status, episódio com detalhe e barra própria, duração, tamanho estimado→final, tempo restante/decorrido, ações); painel Configuração recolhível à direita, com a preferência salva; barra única de progresso total e ações.
+- Corrige a linha selecionada da fila que ficava branca e ilegível ao clicar fora da janela: a seleção usa a mesma cor escura com ou sem foco.
+- Aplica tema escuro completo a listas suspensas, campos, caixas de seleção, barras de rolagem, dicas, janela de atualizações e barra de título do Windows.
+- Remove textos fixos e controles sem efeito da tela principal (subtítulo, caixa “Saída: AV1 10-bit”, explicações repetidas e “Simultâneos”, sempre desabilitado); as explicações continuam nas dicas ao passar o mouse.
+- Permite arrastar arquivos ou pastas do Explorer para a fila e mostra um estado vazio com instruções. O processamento, os parâmetros e os arquivos gerados não mudam.
+
 - Aceita avisos de DTS iguais somente no muxer descartável da decodificação de entrada bem-sucedida; mantém bloqueios de truncamento, DTS retrocedendo, falha de leitura e divergência de frames.
 - Isola falhas por arquivo e continua a fila, preservando cancelamento e pausas por proteção de recursos. Resume os erros ao final sem despejar o log inteiro na janela.
 

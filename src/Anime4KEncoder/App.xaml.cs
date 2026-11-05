@@ -24,6 +24,7 @@ public partial class App : Application
         {
             var app = new App();
             app.InitializeComponent();
+            DarkTitleBar.RegisterForAllWindows();
             app.Run();
         }
         finally { instance.ReleaseMutex(); }

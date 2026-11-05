@@ -96,7 +96,7 @@ public partial class MainWindow
             {
                 Owner = this, Title = "Atualizações e novidades", Width = 760, Height = 570,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Background = new SolidColorBrush(Color.FromRgb(20, 28, 42))
+                Background = new SolidColorBrush(Color.FromRgb(11, 15, 23))
             };
             var panel = new DockPanel { Margin = new Thickness(16) };
             var action = new Button { Content = "Baixar e instalar atualização", Padding = new Thickness(12),
@@ -108,7 +108,8 @@ public partial class MainWindow
             DockPanel.SetDock(status, Dock.Top);
             panel.Children.Add(status);
             panel.Children.Add(new TextBox { Text = notes, IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Brushes.White, Foreground = Brushes.Black });
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalContentAlignment = VerticalAlignment.Top,
+                FontFamily = new FontFamily("Consolas"), FontSize = 12, Padding = new Thickness(10), Margin = new Thickness(0, 0, 0, 12) });
             action.Click += async (_, _) =>
             {
                 if (_updates is null || _availableUpdate is null || _queueCancellation is not null || _downloadingUpdate) return;

@@ -31,10 +31,11 @@ A primeira execução pode levar minutos preparando a engine na sua GPU.
   quando a porcentagem permanece parada no primeiro uso.
 - Arraste pela alça `⋮⋮` de cada episódio para ordenar a fila antes de iniciar.
   A reordenação fica bloqueada durante fila/piloto.
-- Após sucesso, use `▶` para abrir o vídeo e `Pasta` para selecionar a saída no Explorer.
+- Após sucesso, use `▶` para abrir o vídeo e o ícone de pasta para selecionar a saída no Explorer.
+- Arraste arquivos ou pastas do Explorer para a fila para adicioná-los, inclusive durante o processamento.
 - O piloto gera um par de imagens do centro de cada trecho e abre o comparador
   automaticamente. Use a divisória, o zoom e a seleção/alternância dos trechos.
-  O botão **Comparar original e resultado** reabre as imagens salvas. Pilotos
+  O botão **Comparar**, no painel Configuração, reabre as imagens salvas. Pilotos
   antigos precisam ser executados novamente para gerar as comparações.
 
 ## Instalação e atualizações
