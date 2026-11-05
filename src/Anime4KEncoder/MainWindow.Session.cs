@@ -163,6 +163,7 @@ public partial class MainWindow
                 return;
             }
             attempted.Add(next);
+            _attemptedThisRun.Add(next);
             await QueueExecution.RunItemAsync(() => EncodeInBackgroundAsync(next, settings, token), ex =>
             {
                 next.Status = "Falhou";

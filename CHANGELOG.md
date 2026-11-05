@@ -2,6 +2,8 @@
 
 ## Próxima versão
 
+- Corrige falhas falsas em cascata quando o disco de saída enche: a falta de espaço pausa a fila em vez de marcar cada episódio seguinte como “Falhou”. O episódio atual volta para Aguardando com os blocos validados preservados, a saída final parcial (vários GB) é removida para liberar espaço e uma única mensagem pede para liberar espaço e iniciar de novo. Reconhece o código -28 do FFmpeg e os erros de disco cheio do Windows.
+- O aviso de falhas ao fim da fila lista apenas os episódios que falharam nessa execução, sem repetir erros antigos que ficaram salvos na fila.
 - Interface 2.0: layout reorganizado com foco nos trabalhos. Barra superior compacta (versão, status da GPU, Uso do PC como seletor Assistir/Equilibrado/Máximo); cartão “Processando agora” com episódio, progresso, bloco, velocidade, tempos e uso de CPU/RAM/VRAM; fila com 6 colunas (ícone de status, episódio com detalhe e barra própria, duração, tamanho estimado→final, tempo restante/decorrido, ações); painel Configuração recolhível à direita, com a preferência salva; barra única de progresso total e ações.
 - Corrige a linha selecionada da fila que ficava branca e ilegível ao clicar fora da janela: a seleção usa a mesma cor escura com ou sem foco.
 - Aplica tema escuro completo a listas suspensas, campos, caixas de seleção, barras de rolagem, dicas, janela de atualizações e barra de título do Windows.

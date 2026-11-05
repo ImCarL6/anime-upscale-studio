@@ -578,6 +578,7 @@ public partial class MainWindow : Window
             ReadBetaOptions()) { ResourcePercent = ReadResourcePercent() };
 
         var concurrency = ReadConcurrency();
+        _attemptedThisRun.Clear();
         _queueCancellation = new CancellationTokenSource();
         SetRunningUi(true);
         _queueWatch.Restart();
@@ -593,7 +594,8 @@ public partial class MainWindow : Window
         {
             _queueWatch.Stop();
             ResourceStatusText.Text = ex.Message;
-            MessageBox.Show(ex.Message, "Proteção de recursos", MessageBoxButton.OK, MessageBoxImage.Warning);
+            FooterText.Text = ex.Message;
+            MessageBox.Show(ex.Message, ex is DiskSpacePauseException ? "Disco sem espaço" : "Proteção de recursos", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
@@ -607,7 +609,8 @@ public partial class MainWindow : Window
             _queueCancellation.Dispose();
             _queueCancellation = null;
 
-            var failures = Items.Where(i => i.Status == "Falhou").ToArray();
+            // Só falhas desta execução; erros antigos que ficaram na fila não voltam ao aviso.
+            var failures = Items.Where(i => i.Status == "Falhou" && _attemptedThisRun.Contains(i)).ToArray();
             if (failures.Length > 0)
             {
                 var details = $"{failures.Length} arquivo(s) falharam. Os demais itens foram processados, salvo cancelamento ou pausa por recursos.\n\n" +
@@ -967,6 +970,7 @@ public partial class MainWindow : Window
 
     private async Task EncodeAsync(EncodeItem item, JobSettings settings, CancellationToken cancellationToken)
     {
+        _diskFull = false;
         await Dispatcher.InvokeAsync(() =>
         {
             item.IsRunning = true;
@@ -1088,12 +1092,26 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             _allocationFailed = BackgroundRecovery.AllocationFailure(ex.ToString());
+            _diskFull = QueueExecution.IsDiskFull(ex);
             AppendLog(logPath, $"\nERRO FINAL\n{ex}\n");
+            // A saída final parcial nunca é retomada; removê-la devolve o espaço ocupado (vários GB).
+            TryDelete(partialPath);
+            if (_diskFull)
+                AppendLog(logPath, "\nDisco sem espaço: fila pausada; o episódio volta para Aguardando com os blocos validados preservados.\n");
             await Dispatcher.InvokeAsync(() =>
             {
-                item.Status = "Falhou";
-                item.Error = FriendlyError(ex.Message);
-                item.Compatibility = "Não validado";
+                if (_diskFull)
+                {
+                    item.Status = "Aguardando";
+                    item.Stage = "Pausado: disco sem espaço";
+                    item.Error = QueueExecution.DiskFullMessage;
+                }
+                else
+                {
+                    item.Status = "Falhou";
+                    item.Error = FriendlyError(ex.Message);
+                    item.Compatibility = "Não validado";
+                }
                 item.IsRunning = false;
             });
         }

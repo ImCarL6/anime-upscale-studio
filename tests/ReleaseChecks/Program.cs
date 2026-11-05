@@ -96,6 +96,30 @@ using (var cancelled = new CancellationTokenSource())
     catch (OperationCanceledException) { }
 }
 Console.WriteLine("TIMESTAMP_AND_QUEUE_FAILURES=PASS: equal-DTS only, fatal diagnostics retained, next item continues, cancellation/resource pauses propagate.");
+
+// Disco cheio pausa a fila inteira em vez de marcar cada episódio seguinte como "Falhou".
+var diskFullFfmpeg = new InvalidOperationException("""
+    [out#0/matroska @ 000001f152b1ccc0] Task finished with error code: -28 (No space left on device)
+    Conversion failed!
+    """);
+Check(QueueExecution.IsDiskFull(diskFullFfmpeg), "FFmpeg disk-full output not recognized.");
+Check(QueueExecution.IsDiskFull(new Exception("wrapper", new IOException("disk", unchecked((int)0x80070070)))), "ERROR_DISK_FULL HRESULT not recognized.");
+Check(QueueExecution.IsDiskFull(new IOException("handle", unchecked((int)0x80070027))), "ERROR_HANDLE_DISK_FULL HRESULT not recognized.");
+Check(QueueExecution.IsDiskFull("ExitCode=-28"), "FFmpeg exit code -28 not recognized.");
+foreach (var unrelated in new[] { "A duração da saída difere da entrada: 00:20:03 vs. 00:23:47.", "Cannot allocate memory", "non monotonically increasing dts", "space 28" })
+    Check(!QueueExecution.IsDiskFull(unrelated), "Unrelated failure classified as disk full: " + unrelated);
+var diskPause = new DiskSpacePauseException(QueueExecution.DiskFullMessage);
+var afterPause = new List<int>();
+try
+{
+    foreach (var index in new[] { 0, 1, 2 })
+        await QueueExecution.RunItemAsync(() => { afterPause.Add(index); return index == 0 ? Task.FromException(diskPause) : Task.CompletedTask; },
+            _ => throw new Exception("Disk pause recorded as file failure"), CancellationToken.None);
+    throw new Exception("Disk pause did not stop the queue");
+}
+catch (Exception ex) when (ReferenceEquals(ex, diskPause)) { }
+Check(afterPause.SequenceEqual(new[] { 0 }), "Queue continued to later episodes after the disk filled.");
+Console.WriteLine("DISK_FULL_PAUSE=PASS: FFmpeg -28 and Windows disk-full codes recognized, unrelated errors excluded, queue paused without failing later items.");
 Console.WriteLine("INPUT_INTEGRITY=PASS: successful exit with truncation rejected, duration mismatch rejected, extended subtitles accepted.");
 var sessionFile = Path.Combine(temporary, "session", "queue-session.json");
 SessionStore.Save(sessionFile, new QueueSession { OutputDirectory = "output á", InputDirectory = "input", ElapsedSeconds = 123,

@@ -13,6 +13,8 @@ public partial class MainWindow
     private string? _resourceStopReason;
     private BackgroundRecovery? _backgroundRecovery;
     private bool _allocationFailed;
+    private bool _diskFull;
+    private readonly HashSet<EncodeItem> _attemptedThisRun = [];
     private ResourceSnapshot? _lastResourceSnapshot;
 
     private async Task WaitForResourceReserveAsync(CancellationToken token, bool cooldown)
@@ -49,6 +51,8 @@ public partial class MainWindow
                 try { await EncodeAsync(item, settings, attempt.Token); }
                 finally { EndResourceProtection(); }
                 token.ThrowIfCancellationRequested();
+                // Disco cheio afeta todos os próximos episódios: pausar a fila em vez de falhar um por um.
+                if (_diskFull) throw new DiskSpacePauseException(QueueExecution.DiskFullMessage);
                 var recoverable = _resourceStopReason is not null || _allocationFailed;
                 if (!recoverable) return;
                 if (settings.Engine != "animejanai" || !string.IsNullOrWhiteSpace(settings.AdvancedFfmpegCommand))
@@ -65,6 +69,7 @@ public partial class MainWindow
             }
         }
         catch (OperationCanceledException) { item.Status = "Cancelado"; throw; }
+        catch (DiskSpacePauseException) { throw; }
         catch (Exception ex) { item.Status = "Falhou"; item.Error = ex.Message; throw; }
         finally { item.IsRunning = false; _backgroundRecovery = null; }
     }
