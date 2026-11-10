@@ -1,4 +1,4 @@
-# Preparação antecipada de blocos — 2.0.1
+# Preparação antecipada de blocos — 2.0.2
 
 ## O que veio da V2
 
@@ -51,9 +51,10 @@ os cortes por frame, overlaps, codecs, qualidade e fingerprint permanecem iguais
 - Manifestos antigos continuam aceitos; os campos de medição são opcionais.
   O modo registrado é o do início do bloco, não uma classificação de
   interferência nem uma garantia de modo constante durante todo o bloco.
-- Blocos AV1 concluídos permanecem recuperáveis após sucesso. Fontes consumidas
-  são descartáveis. Preparações abandonadas e parciais podem permanecer para
-  inspeção; não são adotadas como checkpoints depois de reiniciar.
+- Após validar e salvar a saída final, remove somente o cache daquele trabalho,
+  incluindo blocos e fontes temporárias. Em falhas e cancelamentos, os caches
+  permanecem. Preparações abandonadas não são adotadas como checkpoints após
+  reiniciar. As medições de fase ficam num pequeno `.segments.json` junto ao log.
 
 ## Ganho esperado e riscos
 
@@ -70,8 +71,8 @@ uso de CPU, mais uma sessão HEVC NVENC e buffers de VRAM. Não se usa NVDEC
 explicitamente. Pode piorar o desempenho em disco lento/compartilhado ou com
 GPU pressionada. A proteção existente continua ativa; os modos de uso reduzido
 não iniciam antecipação. O espaço transitório cresce aproximadamente uma
-fonte lossless. Manter checkpoints após sucesso também requer reservar espaço
-para os blocos AV1 além da saída final.
+fonte lossless. Durante a finalização de cada episódio, seus blocos AV1 ainda
+coexistem com a saída final; após o sucesso, esse espaço é liberado.
 
 ## Validação
 
@@ -108,3 +109,12 @@ fisicamente ou ciclo completo de atualização em Windows limpo.
 
 Isso valida instalação local e restauração, não download/aplicação pelo
 updater entre duas versões nem instalação em Windows limpo.
+
+### Ajuste 2.0.2
+
+A política foi alterada para limpar automaticamente o cache do trabalho após
+validar e salvar a saída final. `ReleaseChecks` e o pipeline GPU com cancelamento
+durante antecipação/retomada passaram: cache preservado no cancelamento e removido
+após sucesso, com medições mantidas junto ao log. Pacote/feed e instalação local
+2.0.2 aprovados; a fila pendente permaneceu intacta e a DLL instalada coincide
+com a testada. Não foi feita limpeza retroativa de outros caches.

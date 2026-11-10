@@ -80,19 +80,19 @@ try {
     [void]$task.GetAwaiter().GetResult()
     Check ($item.Status -eq 'Concluído') ('Encode failed: '+$item.Error+'; log='+$item.LogPath)
     Check (Test-Path -LiteralPath $item.OutputPath) 'Output missing.'
-    Check (Test-Path -LiteralPath (Join-Path $output '.anime-upscale-temp')) 'Successful recovery cache was removed.'
+    Check (!(Test-Path -LiteralPath (Join-Path $output '.anime-upscale-temp'))) 'Successful work temp remains.'
     $log=Get-Content -LiteralPath $item.LogPath -Raw
     if(!$ForceRecovery) { Check ($log.Contains('realtime@throttle')) 'Live pacing missing in real command.' }
     if($ForceRecovery) {
         Check ($log.Contains('speed=0.075')) 'Retry did not slow down.'
         Check ($clock.Elapsed.TotalSeconds -ge 30) 'Recovery cooldown not applied.'
-        Write-Output 'AUTOMATIC_RECOVERY=PASS: forced attempt stop, cooldown, slower retry, final validation and retained recovery cache.'
+        Write-Output 'AUTOMATIC_RECOVERY=PASS: forced attempt stop, cooldown, slower retry, final validation and cleanup.'
     }
     Write-Output ('BACKGROUND_PIPELINE=PASS: '+$item.OutputPath+'; wall='+$clock.Elapsed.TotalSeconds+'; log='+$item.LogPath)
     if($LiveSwitch) {
         Check (!$log.Contains('Retomada automática')) 'Live mode changes restarted processing.'
         Check ($windowType.GetField('_resourceModeChangedDuringRun',$flags).GetValue($window)) 'Mixed-mode history marker missing.'
-        Write-Output 'LIVE_UI_PIPELINE=PASS: modes changed within active block, same attempt, final validation and retained recovery cache.'
+        Write-Output 'LIVE_UI_PIPELINE=PASS: modes changed within active block, same attempt, final validation and cleanup.'
     }
     $cts.Dispose()
     $windowType.GetField('_queueCancellation',$flags).SetValue($window,$null)

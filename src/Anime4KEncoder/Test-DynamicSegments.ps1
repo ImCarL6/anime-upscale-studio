@@ -113,16 +113,16 @@ try{
  Check ($item.Status -eq 'Concluído') ('Output failed: '+$item.Error)
  Check ($script:phase -eq 4) 'Boundary mode changes were not all observed.'
  Check (Test-Path -LiteralPath $item.OutputPath) 'Final output missing.'
- Check (Test-Path -LiteralPath $script:cache) 'Successful recovery cache was removed.'
+ Check (!(Test-Path -LiteralPath $script:cache)) 'Successful job cache was not cleaned.'
  if($StableMaximum){
-  $state=Get-Content -LiteralPath (Join-Path $script:cache 'manifest.json') -Raw | ConvertFrom-Json
+  $state=Get-Content -LiteralPath ($item.LogPath+'.segments.json') -Raw | ConvertFrom-Json
   Check ($state.Segments[1].UsedPrefetchedSource) 'Next block did not use prefetched source.'
   $log=[IO.File]::ReadAllText($item.LogPath)
   Check ($log.IndexOf('Antecipando fonte bloco 2') -lt $log.IndexOf('Bloco 1/2 validado')) 'Extraction was not overlapped.'
   Check ($state.Segments[1].ExtractionSeconds -gt 0 -and $state.Segments[1].CoreSeconds -gt 0 -and $state.Segments[1].SourceBytes -gt 0) 'Phase telemetry missing.'
-  Write-Output ('SOURCE_PREFETCH_PIPELINE=PASS: concurrent extraction adopted; full frame/timestamp/audio validation; telemetry and recovery cache retained; '+$item.OutputPath)
+  Write-Output ('SOURCE_PREFETCH_PIPELINE=PASS: concurrent extraction adopted; full frame/timestamp/audio validation; telemetry retained outside cleaned recovery cache; '+$item.OutputPath)
  }else{
-  Write-Output ('DYNAMIC_PIPELINE=PASS: real 8-minute CFR fixture / 480 frames; 5min -> 1min -> balanced final tail; exact final frame/timestamp/audio validation; recovery cache retained; '+$item.OutputPath)
+  Write-Output ('DYNAMIC_PIPELINE=PASS: real 8-minute CFR fixture / 480 frames; 5min -> 1min -> balanced final tail; exact final frame/timestamp/audio validation; success cache cleaned; '+$item.OutputPath)
  }
 }finally{
  if($cts){$cts.Cancel()}

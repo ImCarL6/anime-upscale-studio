@@ -2,9 +2,9 @@
 
 ## Próxima versão
 
+- Após validar e salvar o vídeo final, remove automaticamente os blocos recuperáveis e temporários somente daquele trabalho. Preserva originais, caches de outros trabalhos e os blocos de falhas/cancelamentos. As medições por bloco ficam salvas num pequeno arquivo junto ao log.
 - No modo Máximo, antecipa uma única extração do próximo bloco enquanto AnimeJaNai e AV1 processam o atual. A antecipação não altera o manifesto nem fixa a próxima fronteira; troca de modo cancela a preparação especulativa e a fronteira continua sendo decidida ao chegar ao bloco. Assistir/Equilibrado mantêm extração serial. Cancelamento drena o processo auxiliar antes de liberar a proteção de recursos; falta de espaço continua pausando a fila.
 - Registra no manifesto o tamanho do lossless, os tempos de extração e do núcleo, o modo na entrada do bloco e o aproveitamento da antecipação, como base para futuras estimativas por pasta. Não altera o algoritmo de estimativas nesta versão.
-- Mantém os blocos recuperáveis do AnimeJaNai também após validar a saída final, para permitir conferência e recuperação sem limpeza automática. Fontes intermediárias consumidas continuam descartáveis.
 
 - Corrige falhas falsas em cascata quando o disco de saída enche: a falta de espaço pausa a fila em vez de marcar cada episódio seguinte como “Falhou”. O episódio atual volta para Aguardando com os blocos validados preservados, a saída final parcial (vários GB) é removida para liberar espaço e uma única mensagem pede para liberar espaço e iniciar de novo. Reconhece o código -28 do FFmpeg e os erros de disco cheio do Windows.
 - O aviso de falhas ao fim da fila lista apenas os episódios que falharam nessa execução, sem repetir erros antigos que ficaram salvos na fila.

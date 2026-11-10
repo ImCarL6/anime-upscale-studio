@@ -1117,9 +1117,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            // Segmented recovery caches remain available until the user has checked playback.
-            var cleanupError = JobTemporaryFiles.Cleanup(workDirectory,
-                outputCompleted && (settings.Engine != "animejanai" || !string.IsNullOrWhiteSpace(settings.AdvancedFfmpegCommand)));
+            var cleanupError = JobTemporaryFiles.Cleanup(workDirectory, outputCompleted);
             if (cleanupError is not null)
                 AppendLog(logPath, $"\nNão foi possível remover os temporários de {workDirectory}: {cleanupError}\n");
             await Dispatcher.InvokeAsync(() =>
@@ -1375,6 +1373,8 @@ public partial class MainWindow : Window
         }
         finally { await StopSourcePrefetchAsync(); }
 
+        // Keep the small phase measurements outside the disposable video cache.
+        SaveSegmentManifest(logPath + ".segments.json", manifest);
         var concatPath = Path.Combine(cacheDirectory, "segments.ffconcat");
         WriteConcatManifest(concatPath, segments);
         var finalArgs = BuildSegmentedFinalMuxArguments(concatPath, item.InputPath, outputPath, source);
