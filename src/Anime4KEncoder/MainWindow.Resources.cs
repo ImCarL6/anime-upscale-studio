@@ -110,6 +110,7 @@ public partial class MainWindow
 
     private void ResourceMode_Changed(object sender, SelectionChangedEventArgs e)
     {
+        if (ReadResourcePercent() != 100) _sourcePrefetch?.Cancel();
         SyncResourceSegments();
         if (!_resourceControlsReady) return;
         MaximumPerformanceButton.Content = ReadResourcePercent() == 100 ? "⚡ Desempenho máximo ativo" : "⚡ Ativar desempenho máximo";

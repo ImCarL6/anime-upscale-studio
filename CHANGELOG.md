@@ -2,6 +2,10 @@
 
 ## Próxima versão
 
+- No modo Máximo, antecipa uma única extração do próximo bloco enquanto AnimeJaNai e AV1 processam o atual. A antecipação não altera o manifesto nem fixa a próxima fronteira; troca de modo cancela a preparação especulativa e a fronteira continua sendo decidida ao chegar ao bloco. Assistir/Equilibrado mantêm extração serial. Cancelamento drena o processo auxiliar antes de liberar a proteção de recursos; falta de espaço continua pausando a fila.
+- Registra no manifesto o tamanho do lossless, os tempos de extração e do núcleo, o modo na entrada do bloco e o aproveitamento da antecipação, como base para futuras estimativas por pasta. Não altera o algoritmo de estimativas nesta versão.
+- Mantém os blocos recuperáveis do AnimeJaNai também após validar a saída final, para permitir conferência e recuperação sem limpeza automática. Fontes intermediárias consumidas continuam descartáveis.
+
 - Corrige falhas falsas em cascata quando o disco de saída enche: a falta de espaço pausa a fila em vez de marcar cada episódio seguinte como “Falhou”. O episódio atual volta para Aguardando com os blocos validados preservados, a saída final parcial (vários GB) é removida para liberar espaço e uma única mensagem pede para liberar espaço e iniciar de novo. Reconhece o código -28 do FFmpeg e os erros de disco cheio do Windows.
 - O aviso de falhas ao fim da fila lista apenas os episódios que falharam nessa execução, sem repetir erros antigos que ficaram salvos na fila.
 - Interface 2.0: layout reorganizado com foco nos trabalhos. Barra superior compacta (versão, status da GPU, Uso do PC como seletor Assistir/Equilibrado/Máximo); cartão “Processando agora” com episódio, progresso, bloco, velocidade, tempos e uso de CPU/RAM/VRAM; fila com 6 colunas (ícone de status, episódio com detalhe e barra própria, duração, tamanho estimado→final, tempo restante/decorrido, ações); painel Configuração recolhível à direita, com a preferência salva; barra única de progresso total e ações.

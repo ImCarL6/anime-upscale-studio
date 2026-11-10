@@ -177,3 +177,41 @@ Check(SegmentPlanning.ValidLayout([], 1, 2), "Fresh plan was rejected.");
 var oneFrame = SegmentPlanning.SelectNext([], 0, 1, fractionalFps, 100, 2, -1);
 Check(oneFrame.UsefulFrameCount == 1 && oneFrame.SourceFrameCount == 1, "Short final segment is invalid.");
 Console.WriteLine("DYNAMIC_SEGMENTS=PASS: 1/3/5 minutes, fractional CFR, both mode directions, exact coverage and overlaps, immutable prefix, persisted mixed layout, legacy cache/repair, pending retry and invalid-layout rejection.");
+
+var speculative = SegmentPlanning.Create(1, 7200, 20000, 7200, 2);
+var preparedSource = new PreparedSource("synthetic-source", 1234, 2.5);
+await using (var pending = new SourcePrefetch(speculative, CancellationToken.None, _ => Task.FromResult(preparedSource)))
+    Check(await pending.TakeAsync(speculative, CancellationToken.None) == preparedSource, "Matching speculation was not reused.");
+var stopped = false;
+await using (var pending = new SourcePrefetch(speculative, CancellationToken.None, async token =>
+{
+    try { await Task.Delay(Timeout.Infinite, token); return preparedSource; }
+    finally { stopped = true; }
+}))
+{
+    var shorter = SegmentPlanning.Create(1, 7200, 20000, 1440, 2);
+    Check(await pending.TakeAsync(shorter, CancellationToken.None) is null, "Mode change reused wrong frames.");
+}
+Check(stopped, "Abandoned preparation was not cancelled and drained.");
+using (var parent = new CancellationTokenSource())
+{
+    await using var pending = new SourcePrefetch(speculative, parent.Token, async token =>
+    { await Task.Delay(Timeout.Infinite, token); return preparedSource; });
+    parent.Cancel();
+    try { await pending.TakeAsync(speculative, parent.Token); throw new Exception("Parent cancellation ignored."); }
+    catch (OperationCanceledException) { }
+}
+await using (var pending = new SourcePrefetch(speculative, CancellationToken.None, _ => Task.FromResult(preparedSource)))
+{
+    pending.Cancel();
+    Check(await pending.TakeAsync(speculative, CancellationToken.None) is null, "Reduced mode adopted cancelled speculation.");
+}
+await using (var pending = new SourcePrefetch(speculative, CancellationToken.None, _ => Task.FromException<PreparedSource>(diskFullFfmpeg)))
+{
+    try { await pending.TakeAsync(speculative, CancellationToken.None); throw new Exception("Disk-full swallowed."); }
+    catch (Exception ex) when (ReferenceEquals(ex, diskFullFfmpeg)) { }
+}
+await using (var pending = new SourcePrefetch(speculative, CancellationToken.None, _ => Task.FromException<PreparedSource>(new IOException("abandoned"))))
+    Check(await pending.TakeAsync(speculative with { SourceEndFrame = speculative.SourceEndFrame - 1 }, CancellationToken.None) is null,
+        "Invalid speculation was adopted.");
+Console.WriteLine("SOURCE_PREFETCH=PASS: exact plan reuse, mode change, cancellation/drain, reduced mode, disk-full propagation, abandoned failure.");

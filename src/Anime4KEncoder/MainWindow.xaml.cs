@@ -1117,7 +1117,9 @@ public partial class MainWindow : Window
         }
         finally
         {
-            var cleanupError = JobTemporaryFiles.Cleanup(workDirectory, outputCompleted);
+            // Segmented recovery caches remain available until the user has checked playback.
+            var cleanupError = JobTemporaryFiles.Cleanup(workDirectory,
+                outputCompleted && (settings.Engine != "animejanai" || !string.IsNullOrWhiteSpace(settings.AdvancedFfmpegCommand)));
             if (cleanupError is not null)
                 AppendLog(logPath, $"\nNão foi possível remover os temporários de {workDirectory}: {cleanupError}\n");
             await Dispatcher.InvokeAsync(() =>
@@ -1257,126 +1259,121 @@ public partial class MainWindow : Window
 
         const double segmentProgressTotal = 94;
         long nextFrame = 0;
-        for (var index = 0; nextFrame < source.VideoPackets; index++)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await WaitForResourceReserveAsync(cancellationToken, false);
-            var mode = ReadResourcePercent();
-            var segment = SegmentPlanning.SelectNext(manifest.Segments, index, source.VideoPackets,
-                source.AverageFrameRate, mode, AnimeJanaiOverlapFrames, lastCachedIndex);
-            manifest.LayoutPolicyVersion = 1;
-            SaveSegmentManifest(manifestPath, manifest);
-            segments.Add(segment);
-            nextFrame = segment.UsefulEndFrame;
-            // The denominator is only an estimate; progress uses absolute source frames.
-            var currentFrames = Math.Max(1L, (long)Math.Round(source.AverageFrameRate * SegmentPlanning.Seconds(mode), MidpointRounding.AwayFromZero));
-            var estimatedSegmentCount = Math.Max(lastCachedIndex + 1, index + 1 + (int)Math.Ceiling((source.VideoPackets - nextFrame) / (double)currentFrames));
-            var segmentProgressSpan = segmentProgressTotal * segment.UsefulFrameCount / source.VideoPackets;
-            AppendLog(logPath, $"\nPlanejado bloco {index + 1}: frames [{segment.UsefulStartFrame},{segment.UsefulEndFrame}); modo={mode}; próximo alvo={SegmentPlanning.Seconds(mode)}s; duração={segment.UsefulFrameCount / source.AverageFrameRate:0.###}s.\n");
-            var checkpoint = manifest.Segments[index];
-            var completedPath = Path.Combine(cacheDirectory, SegmentFileName(segment.Index));
-            var partialSegmentPath = completedPath + ".partial.mkv";
-            var sourceSegmentPath = Path.Combine(cacheDirectory, $"source-{segment.Index + 1:0000}.mkv");
-            var sourcePartialPath = sourceSegmentPath + ".partial.mkv";
-            var progressStart = segmentProgressTotal * segment.UsefulStartFrame / source.VideoPackets;
-
-            if (File.Exists(completedPath))
+            for (var index = 0; nextFrame < source.VideoPackets; index++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                await WaitForResourceReserveAsync(cancellationToken, false);
+                var mode = ReadResourcePercent();
+                var segment = SegmentPlanning.SelectNext(manifest.Segments, index, source.VideoPackets,
+                    source.AverageFrameRate, mode, AnimeJanaiOverlapFrames, lastCachedIndex);
+                manifest.LayoutPolicyVersion = 1;
+                SaveSegmentManifest(manifestPath, manifest);
+                segments.Add(segment);
+                nextFrame = segment.UsefulEndFrame;
+                // The denominator is only an estimate; progress uses absolute source frames.
+                var currentFrames = Math.Max(1L, (long)Math.Round(source.AverageFrameRate * SegmentPlanning.Seconds(mode), MidpointRounding.AwayFromZero));
+                var estimatedSegmentCount = Math.Max(lastCachedIndex + 1, index + 1 + (int)Math.Ceiling((source.VideoPackets - nextFrame) / (double)currentFrames));
+                var segmentProgressSpan = segmentProgressTotal * segment.UsefulFrameCount / source.VideoPackets;
+                AppendLog(logPath, $"\nPlanejado bloco {index + 1}: frames [{segment.UsefulStartFrame},{segment.UsefulEndFrame}); modo={mode}; próximo alvo={SegmentPlanning.Seconds(mode)}s; duração={segment.UsefulFrameCount / source.AverageFrameRate:0.###}s.\n");
+                var checkpoint = manifest.Segments[index];
+                var completedPath = Path.Combine(cacheDirectory, SegmentFileName(segment.Index));
+                var partialSegmentPath = completedPath + ".partial.mkv";
+                var sourceSegmentPath = Path.Combine(cacheDirectory, $"source-{segment.Index + 1:0000}.mkv");
+                var sourcePartialPath = sourceSegmentPath + ".partial.mkv";
+                var progressStart = segmentProgressTotal * segment.UsefulStartFrame / source.VideoPackets;
+
+                if (File.Exists(completedPath))
+                {
+                    try
+                    {
+                        await ValidateVideoSegmentAsync(completedPath, segment.UsefulFrameCount, cancellationToken,
+                            checked(source.Width * 2), checked(source.Height * 2));
+                        checkpoint.Completed = true;
+                        checkpoint.CompletedAt = File.GetLastWriteTimeUtc(completedPath);
+                        SaveSegmentManifest(manifestPath, manifest);
+                        AppendLog(logPath, $"\nBloco {index + 1}/{estimatedSegmentCount} recuperado do cache e validado.\n");
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            item.Stage = $"Bloco {index + 1}/{estimatedSegmentCount} recuperado";
+                            item.Progress = Math.Min(99.4, progressStart + segmentProgressSpan);
+                            item.Processed = TimeSpan.FromSeconds(item.Duration.TotalSeconds * item.Progress / 100);
+                            item.UpdateProgress();
+                            RefreshOverall();
+                        });
+                        continue;
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog(logPath, $"\nBloco {index + 1} existente foi rejeitado e será refeito: {ex.Message}\n");
+                        cancellationToken.ThrowIfCancellationRequested();
+                        TryDelete(completedPath);
+                        checkpoint.Completed = false;
+                    }
+                }
+
+                TryDelete(partialSegmentPath);
+                TryDelete(sourcePartialPath);
+                TryDelete(sourceSegmentPath);
+                var segmentCompleted = false;
                 try
                 {
-                    await ValidateVideoSegmentAsync(completedPath, segment.UsefulFrameCount, cancellationToken,
-                        checked(source.Width * 2), checked(source.Height * 2));
-                    checkpoint.Completed = true;
-                    checkpoint.CompletedAt = File.GetLastWriteTimeUtc(completedPath);
-                    SaveSegmentManifest(manifestPath, manifest);
-                    AppendLog(logPath, $"\nBloco {index + 1}/{estimatedSegmentCount} recuperado do cache e validado.\n");
                     await Dispatcher.InvokeAsync(() =>
                     {
-                        item.Stage = $"Bloco {index + 1}/{estimatedSegmentCount} recuperado";
-                        item.Progress = Math.Min(99.4, progressStart + segmentProgressSpan);
-                        item.Processed = TimeSpan.FromSeconds(item.Duration.TotalSeconds * item.Progress / 100);
-                        item.UpdateProgress();
-                        RefreshOverall();
+                        item.Status = "Processando";
+                        item.Stage = $"Preparando bloco {index + 1}/{estimatedSegmentCount}";
                     });
-                    continue;
+
+                    var prepared = await TakeSourcePrefetchAsync(segment, logPath, cancellationToken);
+                    checkpoint.UsedPrefetchedSource = prepared is not null;
+                    prepared ??= await PrepareSourceAsync(item.InputPath, sourceSegmentPath,
+                        segment, source.PixelFormat, logPath, cancellationToken);
+                    sourceSegmentPath = prepared.Path;
+                    checkpoint.SourceBytes = prepared.Bytes;
+                    checkpoint.ExtractionSeconds = prepared.ExtractionSeconds;
+                    checkpoint.ResourcePercent = mode;
+
+                    StartSourcePrefetch(segment, manifest, lastCachedIndex, source, cacheDirectory, logPath, cancellationToken);
+                    var coreWatch = Stopwatch.StartNew();
+
+                    await RunAnimeJanaiSegmentPipeAsync(
+                        item,
+                        settings,
+                        sourceSegmentPath,
+                        partialSegmentPath,
+                        configPath,
+                        segment,
+                        estimatedSegmentCount,
+                        progressStart + segmentProgressSpan * 0.12,
+                        segmentProgressSpan * 0.88,
+                        source.AverageFrameRate,
+                        logPath,
+                        cancellationToken);
+                    checkpoint.CoreSeconds = coreWatch.Elapsed.TotalSeconds;
+
+                    await ValidateVideoSegmentAsync(partialSegmentPath, segment.UsefulFrameCount, cancellationToken,
+                        checked(source.Width * 2), checked(source.Height * 2));
+                    File.Move(partialSegmentPath, completedPath, true);
+                    segmentCompleted = true;
+                    checkpoint.Completed = true;
+                    checkpoint.CompletedAt = DateTimeOffset.Now;
+                    checkpoint.OutputBytes = new FileInfo(completedPath).Length;
+                    SaveSegmentManifest(manifestPath, manifest);
+                    AppendLog(logPath, $"\nBloco {index + 1}/{estimatedSegmentCount} validado: {segment.UsefulFrameCount} frames, {FormatBytes(checkpoint.OutputBytes)}.\n");
                 }
-                catch (Exception ex)
+                finally
                 {
-                    AppendLog(logPath, $"\nBloco {index + 1} existente foi rejeitado e será refeito: {ex.Message}\n");
-                    cancellationToken.ThrowIfCancellationRequested();
-                    TryDelete(completedPath);
-                    checkpoint.Completed = false;
-                }
-            }
-
-            TryDelete(partialSegmentPath);
-            TryDelete(sourcePartialPath);
-            TryDelete(sourceSegmentPath);
-            var segmentCompleted = false;
-            try
-            {
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    item.Status = "Processando";
-                    item.Stage = $"Preparando bloco {index + 1}/{estimatedSegmentCount}";
-                });
-
-                var sourceDuration = TimeSpan.FromSeconds(segment.SourceFrameCount / source.AverageFrameRate);
-                var sourceArgs = BuildLosslessSourceSegmentArguments(
-                    item.InputPath,
-                    sourcePartialPath,
-                    segment.SourceStartFrame,
-                    segment.SourceFrameCount,
-                    source.PixelFormat);
-                await RunFfmpegAsync(
-                    item,
-                    sourceArgs,
-                    progressStart,
-                    segmentProgressSpan * 0.12,
-                    logPath,
-                    cancellationToken,
-                    sourceDuration,
-                    $"Preparando bloco {index + 1}/{estimatedSegmentCount}");
-
-                var prepared = await ProbeMediaStructureAsync(sourcePartialPath, true, cancellationToken);
-                if (prepared.VideoPackets != segment.SourceFrameCount)
-                    throw new InvalidOperationException($"O trecho temporário {index + 1} contém {prepared.VideoPackets} frames; eram esperados {segment.SourceFrameCount}.");
-                File.Move(sourcePartialPath, sourceSegmentPath, true);
-
-                await RunAnimeJanaiSegmentPipeAsync(
-                    item,
-                    settings,
-                    sourceSegmentPath,
-                    partialSegmentPath,
-                    configPath,
-                    segment,
-                    estimatedSegmentCount,
-                    progressStart + segmentProgressSpan * 0.12,
-                    segmentProgressSpan * 0.88,
-                    source.AverageFrameRate,
-                    logPath,
-                    cancellationToken);
-
-                await ValidateVideoSegmentAsync(partialSegmentPath, segment.UsefulFrameCount, cancellationToken,
-                    checked(source.Width * 2), checked(source.Height * 2));
-                File.Move(partialSegmentPath, completedPath, true);
-                segmentCompleted = true;
-                checkpoint.Completed = true;
-                checkpoint.CompletedAt = DateTimeOffset.Now;
-                checkpoint.OutputBytes = new FileInfo(completedPath).Length;
-                SaveSegmentManifest(manifestPath, manifest);
-                AppendLog(logPath, $"\nBloco {index + 1}/{estimatedSegmentCount} validado: {segment.UsefulFrameCount} frames, {FormatBytes(checkpoint.OutputBytes)}.\n");
-            }
-            finally
-            {
-                if (segmentCompleted)
-                {
-                    TryDelete(sourcePartialPath);
-                    TryDelete(sourceSegmentPath);
-                    TryDelete(partialSegmentPath);
+                    if (segmentCompleted)
+                    {
+                        TryDelete(sourcePartialPath);
+                        TryDelete(sourceSegmentPath);
+                        TryDelete(partialSegmentPath);
+                    }
                 }
             }
         }
+        finally { await StopSourcePrefetchAsync(); }
 
         var concatPath = Path.Combine(cacheDirectory, "segments.ffconcat");
         WriteConcatManifest(concatPath, segments);

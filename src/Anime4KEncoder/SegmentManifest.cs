@@ -41,5 +41,10 @@ public sealed class SegmentCheckpoint
     public bool Completed { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public long OutputBytes { get; set; }
+    public long SourceBytes { get; set; }
+    public double ExtractionSeconds { get; set; }
+    public double CoreSeconds { get; set; }
+    public int ResourcePercent { get; set; }
+    public bool UsedPrefetchedSource { get; set; }
 }
 

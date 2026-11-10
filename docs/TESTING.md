@@ -1,5 +1,11 @@
 # Testes
 
+## Preparação antecipada (2.0.1)
+
+Consulte [SOURCE-PREFETCH.md](SOURCE-PREFETCH.md) para arquitetura, limites,
+ganho projetado e cenários de cancelamento/troca de modo. Os testes de blocos
+agora exigem que o cache recuperável seja preservado após sucesso.
+
 ## Timestamps e isolamento de falhas na fila
 
 `ReleaseChecks` aceita DTS iguais apenas no muxer `null` de uma decodificação com
@@ -19,7 +25,7 @@ persistido e adaptação de caches fixos da 0.1.6. Layouts inconsistentes são r
 minutos com 480 frames. Troca o seletor nas fronteiras para selecionar um bloco de
 cinco minutos, um de um minuto e uma cauda no modo equilibrado. Libera o ritmo após
 a seleção de cada fronteira para não transformar o teste em benchmark do modo
-reduzido. Exige validação final de frames, timestamps e áudio e limpeza após sucesso.
+reduzido. Exige validação final de frames, timestamps e áudio e cache preservado após sucesso.
 `-CancelAndResume` cancela após os dois primeiros blocos, simula um parcial inacabado
 e exige retomada sem reescrever os blocos concluídos. É um teste de pipeline com GPU,
 não um benchmark de episódio real.
@@ -34,12 +40,12 @@ corrigidas; o aplicativo WPF usa as dependências fornecidas pelo runtime deskto
 
 `Test-BackgroundV2.ps1 -Package <prévia> -FixturePath <mídia-sintética> -LiveSwitch`
 verifica seletor habilitado em processamento, confirma os três comandos no mesmo
-bloco/tentativa e exige validação final, limpeza e marcador de histórico misto.
+bloco/tentativa e exige validação final, cache preservado e marcador de histórico misto.
 
 ## Retomada e proteção
 
 - `dotnet run --project tests/ResourceChecks/ResourceChecks.csproj`: CPU nativa 35%/75%, herança, remoção do limite artificial de memória, reserva, pressão transitória/sustentada e orçamento de duas retomadas.
-- `Test-BackgroundV2.ps1 -Package <prévia> -FixturePath <fixture-sintética>`: fila real, cadência, saída validada e limpeza após sucesso.
+- `Test-BackgroundV2.ps1 -Package <prévia> -FixturePath <fixture-sintética>`: fila real, cadência, saída validada e cache preservado após sucesso.
 - Acrescentar `-ForceRecovery`: interrompe apenas o Job Object da tentativa, simulando pressão sem esgotar memória; verifica espera mínima de 30s, retomada mais lenta e resultado final.
 - Acrescentar `-ForceRecovery -CancelRecovery`: cancela manualmente durante a espera e verifica ausência de retomada.
 - `-ProfileCode V3-Compact-Sharp1` verifica o perfil Compact alternativo com a mesma fixture sintética.

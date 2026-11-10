@@ -1,5 +1,8 @@
-param([Parameter(Mandatory)][string]$Package,[switch]$CancelAndResume)
+param([Parameter(Mandatory)][string]$Package,[switch]$CancelAndResume,[switch]$StableMaximum,[switch]$CancelDuringPrefetch,
+ [ValidateSet('1280x720','1920x1080')][string]$SourceSize='1280x720')
 $ErrorActionPreference='Stop'
+if($CancelDuringPrefetch -and !$StableMaximum){throw '-CancelDuringPrefetch requires -StableMaximum.'}
+if($CancelAndResume -and $StableMaximum){throw 'Select either dynamic boundary recovery or stable maximum.'}
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Set-Location -LiteralPath $Package
@@ -24,7 +27,7 @@ try{
  $work=Join-Path $Package ('validation\dynamic-'+[guid]::NewGuid().ToString('N'))
  New-Item -ItemType Directory -Path $work | Out-Null
  $source=Join-Path $work 'source.mkv'
- & (Join-Path $Package 'tools\ffmpeg\ffmpeg.exe') -hide_banner -v error -nostdin -y -f lavfi -i 'testsrc2=size=1280x720:rate=1:duration=480' -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=480' -map 0:v -map 1:a -c:v ffv1 -level 3 -c:a aac -shortest $source
+ & (Join-Path $Package 'tools\ffmpeg\ffmpeg.exe') -hide_banner -v error -nostdin -y -f lavfi -i "testsrc2=size=${SourceSize}:rate=1:duration=480" -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=480' -map 0:v -map 1:a -c:v ffv1 -level 3 -c:a aac -shortest $source
  Check ($LASTEXITCODE -eq 0) 'Synthetic input generation failed.'
  $mode=$window.FindName('ResourceModeCombo');$mode.SelectedIndex=2
  $window.Items.Clear()
@@ -47,7 +50,12 @@ try{
    }
    if($script:cache -and (Test-Path -LiteralPath (Join-Path $script:cache 'manifest.json'))){
     $state=Get-Content -LiteralPath (Join-Path $script:cache 'manifest.json') -Raw | ConvertFrom-Json
-    if($script:phase -eq 0 -and $state.Segments[0].Completed){
+    if($CancelDuringPrefetch -and !$script:cancelledPrefetch -and $type.GetField('_sourcePrefetch',$flags).GetValue($window)){
+     $script:cancelledPrefetch=$true;$cts.Cancel()
+    }
+    if($StableMaximum){
+     if($state.Segments.Count -ge 2 -and $state.Segments[1].Completed){$script:phase=4}
+    }elseif($script:phase -eq 0 -and $state.Segments[0].Completed){
      Check ($state.Segments[0].UsefulEndFrame -eq 300) 'Maximum block was not five minutes.'
      $mode.SelectedIndex=0;$script:phase=1
     }elseif($script:phase -eq 1 -and $state.Segments.Count -ge 2){
@@ -76,6 +84,17 @@ try{
  },$window.Dispatcher)
  $timer.Start();try{[Windows.Threading.Dispatcher]::PushFrame($frame)}finally{$timer.Stop()}
  if($script:failure){throw $script:failure}
+ if($CancelDuringPrefetch){
+  Check ($task.IsCanceled -and $script:cancelledPrefetch) 'Cancellation during prefetch did not propagate.'
+  Check ($null -eq $type.GetField('_sourcePrefetch',$flags).GetValue($window)) 'Prefetch not drained after cancellation.'
+  Check (Test-Path -LiteralPath $script:cache) 'Cancellation removed cache.'
+  $cts.Dispose();$cts=[Threading.CancellationTokenSource]::new();$type.GetField('_queueCancellation',$flags).SetValue($window,$cts)
+  $task=$type.GetMethod('EncodeInBackgroundAsync',$flags).Invoke($window,@($item,$parameters[0],$cts.Token))
+  $frame=[Windows.Threading.DispatcherFrame]::new();$deadline=[DateTimeOffset]::Now.AddMinutes(6)
+  $timer.Start();try{[Windows.Threading.Dispatcher]::PushFrame($frame)}finally{$timer.Stop()}
+  if($script:failure){throw $script:failure}
+  Write-Output 'PREFETCH_CANCEL=PASS: cancelled and drained concurrent extraction; preserved cache; resumed successfully.'
+ }
  if($CancelAndResume){
   Check ($task.IsCanceled -and $item.Status -eq 'Cancelado' -and $script:phase -eq 3) 'First pass did not preserve cancellation.'
   Check (Test-Path -LiteralPath $script:cache) 'Cancellation removed the cache.'
@@ -94,8 +113,17 @@ try{
  Check ($item.Status -eq 'Concluído') ('Output failed: '+$item.Error)
  Check ($script:phase -eq 4) 'Boundary mode changes were not all observed.'
  Check (Test-Path -LiteralPath $item.OutputPath) 'Final output missing.'
- Check (!(Test-Path -LiteralPath $script:cache)) 'Successful job cache was not cleaned.'
- Write-Output ('DYNAMIC_PIPELINE=PASS: real 8-minute CFR fixture / 480 frames; 5min -> 1min -> balanced final tail; same queue, exact final frame/timestamp/audio validation and cleanup; '+$item.OutputPath)
+ Check (Test-Path -LiteralPath $script:cache) 'Successful recovery cache was removed.'
+ if($StableMaximum){
+  $state=Get-Content -LiteralPath (Join-Path $script:cache 'manifest.json') -Raw | ConvertFrom-Json
+  Check ($state.Segments[1].UsedPrefetchedSource) 'Next block did not use prefetched source.'
+  $log=[IO.File]::ReadAllText($item.LogPath)
+  Check ($log.IndexOf('Antecipando fonte bloco 2') -lt $log.IndexOf('Bloco 1/2 validado')) 'Extraction was not overlapped.'
+  Check ($state.Segments[1].ExtractionSeconds -gt 0 -and $state.Segments[1].CoreSeconds -gt 0 -and $state.Segments[1].SourceBytes -gt 0) 'Phase telemetry missing.'
+  Write-Output ('SOURCE_PREFETCH_PIPELINE=PASS: concurrent extraction adopted; full frame/timestamp/audio validation; telemetry and recovery cache retained; '+$item.OutputPath)
+ }else{
+  Write-Output ('DYNAMIC_PIPELINE=PASS: real 8-minute CFR fixture / 480 frames; 5min -> 1min -> balanced final tail; exact final frame/timestamp/audio validation; recovery cache retained; '+$item.OutputPath)
+ }
 }finally{
  if($cts){$cts.Cancel()}
  $type.GetField('_queueCancellation',$flags).SetValue($window,$null)
