@@ -123,13 +123,56 @@ Console.WriteLine("DISK_FULL_PAUSE=PASS: FFmpeg -28 and Windows disk-full codes 
 Console.WriteLine("INPUT_INTEGRITY=PASS: successful exit with truncation rejected, duration mismatch rejected, extended subtitles accepted.");
 var sessionFile = Path.Combine(temporary, "session", "queue-session.json");
 SessionStore.Save(sessionFile, new QueueSession { OutputDirectory = "output á", InputDirectory = "input", ElapsedSeconds = 123,
-    Items = [new QueueEntry { InputPath = "épisode.mkv", Status = "Processando", Progress = 42 }] });
+    Items = [new QueueEntry { InputPath = "épisode.mkv", Status = "Processando", Progress = 42,
+        EstimatedOutputBytes = 4000000, EstimatedTotalSeconds = 1234, EstimateBasis = "3 execuções semelhantes" }] });
 SessionStore.Save(sessionFile, new QueueSession { OutputDirectory = "updated", ElapsedSeconds = 150 });
 Check(SessionStore.Load(sessionFile)!.ElapsedSeconds == 150, "Session latest state lost.");
 File.WriteAllText(sessionFile, "broken-json");
 var recovered = SessionStore.Load(sessionFile)!;
 Check(recovered.ElapsedSeconds == 123 && recovered.Items.Single().InputPath == "épisode.mkv", "Session backup recovery failed.");
+Check(recovered.Items[0].EstimatedOutputBytes == 4000000 && recovered.Items[0].EstimatedTotalSeconds == 1234 &&
+    recovered.Items[0].EstimateBasis == "3 execuções semelhantes", "Original estimate lost across session recovery.");
 Console.WriteLine("QUEUE_SESSION=PASS: atomic replacement, accumulated time, paths, queue and corrupted-primary recovery.");
+
+var estimateNow = DateTimeOffset.UtcNow;
+var estimateInput = new QueueEstimateInput(1000000000, 1200, 1920, 1080, 6666667, 2, false, "h264", "yuv420p");
+var measurement = new HistoryRecord(estimateNow, "animejanai", "Balanced", 28, estimateInput.InputBytes,
+    4000000000, 1200, 9600, InputBitRate: estimateInput.InputBitRate, AudioTracks: 2,
+    InputVideoCodec: "h264", InputPixelFormat: "yuv420p", PipelineVersion: 1) { ResourcePercent = 80 };
+AdaptiveEstimate Predict(IEnumerable<HistoryRecord> history, QueueEstimateInput? input = null) =>
+    QueueEstimates.Predict(input ?? estimateInput, history.ToArray(), "animejanai", "Balanced", 28, 1,
+        false, "", 1, 80, estimateNow);
+var initialEstimate = Predict([]);
+var previousEstimate = initialEstimate;
+foreach (var sampleCount in new[] { 1, 2, 5, 20, 80 })
+{
+    var learned = Predict(Enumerable.Repeat(measurement, sampleCount));
+    Check(Math.Abs(learned.TotalSeconds - measurement.ElapsedSeconds) < Math.Abs(previousEstimate.TotalSeconds - measurement.ElapsedSeconds),
+        "Time estimate failed to converge after more completed episodes.");
+    Check(Math.Abs(learned.OutputBytes - measurement.OutputBytes) < Math.Abs(previousEstimate.OutputBytes - measurement.OutputBytes),
+        "Size estimate failed to converge after more completed episodes.");
+    Check(learned.SampleCount == sampleCount && learned.Confidence > previousEstimate.Confidence,
+        "Learning confidence failed to grow with comparable measurements.");
+    previousEstimate = learned;
+}
+Check(Math.Abs(previousEstimate.TotalSeconds / measurement.ElapsedSeconds - 1) < 0.01,
+    "Default guess retained too much influence after 80 completed episodes.");
+var incompatible = new[] { measurement with { Engine = "anime4k" }, measurement with { ResourcePercent = 100 },
+    measurement with { ResourcePercent = -1 }, measurement with { PipelineVersion = 0 },
+    measurement with { IsBeta = true }, measurement with { BetaSignature = "other" },
+    measurement with { DurationSeconds = double.NaN }, measurement with { ElapsedSeconds = double.PositiveInfinity } };
+Check(Predict(incompatible) == initialEstimate, "Incompatible or invalid history affected estimates.");
+var recent = measurement with { Timestamp = estimateNow.AddDays(-1), OutputBytes = 3000000000, ElapsedSeconds = 8000 };
+var older = measurement with { Timestamp = estimateNow.AddDays(-2) };
+Check(Predict(Enumerable.Repeat(older, 80).Append(recent)) == Predict(Enumerable.Repeat(older, 79).Append(recent)),
+    "Old measurements crowded a newer comparable completion out of the history window.");
+var doubled = Predict([measurement], estimateInput with { DurationSeconds = 2400, InputBytes = 2000000000 });
+var single = Predict([measurement]);
+Check(doubled.OutputBytes == single.OutputBytes * 2 && Math.Abs(doubled.TotalSeconds - single.TotalSeconds * 2) < 0.001,
+    "Different episode durations were not normalized.");
+Check(Predict([measurement with { Timestamp = estimateNow.AddDays(-90) }]).Confidence < single.Confidence,
+    "Old history did not lose influence.");
+Console.WriteLine("ADAPTIVE_QUEUE_ESTIMATES=PASS: sequential learning, convergence, compatibility, recent completions, duration scaling, age decay.");
 
 Check(SegmentPlanning.Seconds(70) == 60 && SegmentPlanning.Seconds(80) == 180 && SegmentPlanning.Seconds(100) == 300, "Wrong live block durations.");
 var layout = new List<SegmentCheckpoint>();

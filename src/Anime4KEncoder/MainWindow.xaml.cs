@@ -1075,6 +1075,7 @@ public partial class MainWindow : Window
                 item.Stage = "Finalizado";
                 item.Compatibility = validation;
                 item.IsRunning = false;
+                item.FinishTiming(DateTimeOffset.Now);
                 item.UpdateProgress();
                 UpdateEstimates();
             });
@@ -2287,6 +2288,7 @@ public partial class MainWindow : Window
         long total = 0;
         double totalSeconds = 0;
         var sampleCount = 0;
+        var estimatedItems = 0;
         double confidenceTotal = 0;
         var pilotApplied = false;
         var concurrency = ReadConcurrency();
@@ -2296,6 +2298,14 @@ public partial class MainWindow : Window
 
         foreach (var item in Items)
         {
+            // Preserve the prediction made before completion for the final comparison.
+            if (item.Status == "Concluído")
+            {
+                total += item.ActualOutputBytes;
+                totalSeconds += item.Elapsed.TotalSeconds;
+                continue;
+            }
+            estimatedItems++;
             var estimate = BuildAdaptiveEstimate(item, engine.Code, profile.Code, cq, concurrency, isBeta, betaSignature, pipelineVersion);
             var matchingPilot = _lastPilotResult is { } candidate && candidate.ResourcePercent == ReadResourcePercent() &&
                                 candidate.Signature == BuildPilotSignature(item, engine.Code, profile.Code, cq, isBeta, betaSignature) &&
@@ -2324,7 +2334,7 @@ public partial class MainWindow : Window
             totalSeconds += item.EstimatedTotalSeconds;
         }
 
-        var averageConfidence = Items.Count > 0 ? confidenceTotal / Items.Count : 0;
+        var averageConfidence = estimatedItems > 0 ? confidenceTotal / estimatedItems : 0;
         var confidenceText = averageConfidence >= 0.75 ? "alta" : averageConfidence >= 0.35 ? "em aprendizado" : "inicial";
         var modelText = pilotApplied
             ? $"piloto medido aplicado; demais itens usam histórico {(isBeta ? "com opcionais" : "padrão")}; confiança {confidenceText}"
@@ -2345,89 +2355,14 @@ public partial class MainWindow : Window
 
     private AdaptiveEstimate BuildAdaptiveEstimate(EncodeItem item, string engine, string profile, int cq, int concurrency, bool isBeta, string betaSignature, int pipelineVersion)
     {
-        List<HistoryRecord> history;
-        lock (_historyLock) history = _history.ToList();
-
-        var candidates = history
-            .Where(h => h.ResourcePercent == ReadResourcePercent() && h.Engine == engine && h.IsBeta == isBeta && h.BetaSignature == betaSignature &&
-                        (engine != "animejanai" || h.PipelineVersion == pipelineVersion) &&
-                        h.DurationSeconds > 0 && h.ElapsedSeconds > 0 && h.OutputBytes > 0)
-            .Select(h => new { Record = h, Distance = EstimateDistance(h, item, profile, cq, concurrency) })
-            .OrderBy(x => x.Distance)
-            .Take(80)
-            .ToArray();
-
-        var weighted = candidates
-            .Select(x =>
-            {
-                var ageDays = Math.Max(0, (DateTimeOffset.Now - x.Record.Timestamp).TotalDays);
-                var recency = 1.0 / (1.0 + ageDays / 90.0);
-                var weight = Math.Exp(-x.Distance) * recency;
-                return (x.Record, Weight: weight);
-            })
-            .Where(x => x.Weight > 0.02)
-            .ToArray();
-
-        var weightTotal = weighted.Sum(x => x.Weight);
-        var learnedFactor = Math.Clamp(weightTotal / 5.0, 0, 0.88);
-        var defaultRatio = DefaultSizeRatio(engine) * Math.Pow(2, (28 - cq) / 6.0);
-        var defaultOutput = Math.Max(0, item.InputBytes * Math.Clamp(defaultRatio, 0.35, 12));
-        var defaultTimeFactor = DefaultRealTimeFactor(engine, profile);
-        var defaultTime = Math.Max(1, item.Duration.TotalSeconds * defaultTimeFactor);
-
-        if (weightTotal <= 0 || item.Duration.TotalSeconds <= 0)
-            return new AdaptiveEstimate((long)defaultOutput, defaultTime, 0, 0, "estimativa padrão");
-
-        var learnedOutputRate = weighted.Sum(x => x.Record.OutputBytes / x.Record.DurationSeconds * x.Weight) / weightTotal;
-        var learnedTimeFactor = weighted.Sum(x => x.Record.ElapsedSeconds / x.Record.DurationSeconds * x.Weight) / weightTotal;
-        var learnedOutput = Math.Max(0, learnedOutputRate * item.Duration.TotalSeconds);
-        var learnedTime = Math.Max(1, learnedTimeFactor * item.Duration.TotalSeconds);
-
-        var output = (long)Math.Clamp(defaultOutput * (1 - learnedFactor) + learnedOutput * learnedFactor, 1, long.MaxValue);
-        var time = Math.Max(1, defaultTime * (1 - learnedFactor) + learnedTime * learnedFactor);
-        var confidence = Math.Clamp(learnedFactor * Math.Min(1, weighted.Length / 5.0), 0, 1);
-        var exactSamples = weighted.Count(x => x.Record.Profile == profile && Math.Abs(x.Record.Cq - cq) <= 3);
-        var basis = exactSamples > 0 ? $"{exactSamples} execuções semelhantes" : $"{weighted.Length} execuções do motor";
-        return new AdaptiveEstimate(output, time, weighted.Length, confidence, basis);
+        HistoryRecord[] history;
+        lock (_historyLock) history = _history.ToArray();
+        var input = new QueueEstimateInput(item.InputBytes, item.Duration.TotalSeconds, item.InputWidth,
+            item.InputHeight, item.InputBitRate, item.AudioTracks, item.HasAssSubtitle,
+            item.InputVideoCodec, item.InputPixelFormat);
+        return QueueEstimates.Predict(input, history, engine, profile, cq, concurrency,
+            isBeta, betaSignature, pipelineVersion, ReadResourcePercent(), DateTimeOffset.Now);
     }
-
-    private static double EstimateDistance(HistoryRecord record, EncodeItem item, string profile, int cq, int concurrency)
-    {
-        var distance = record.Profile == profile ? 0 : 1.35;
-        distance += Math.Abs(record.Cq - cq) / 6.0;
-        if (record.Concurrency > 0) distance += Math.Abs(record.Concurrency - concurrency) * 0.35;
-
-        var itemPixels = Math.Max(1, item.InputWidth * item.InputHeight);
-        var recordPixels = Math.Max(1, record.InputWidth * record.InputHeight);
-        distance += Math.Abs(Math.Log((double)itemPixels / recordPixels, 2)) * 0.55;
-
-        var itemSourceRate = item.InputBitRate > 0
-            ? item.InputBitRate
-            : item.Duration.TotalSeconds > 0 ? item.InputBytes * 8.0 / item.Duration.TotalSeconds : 0;
-        var recordSourceRate = record.InputBitRate > 0
-            ? record.InputBitRate
-            : record.DurationSeconds > 0 ? record.InputBytes * 8.0 / record.DurationSeconds : 0;
-        if (itemSourceRate > 0 && recordSourceRate > 0)
-            distance += Math.Abs(Math.Log(itemSourceRate / recordSourceRate, 2)) * 0.45;
-
-        if (item.AudioTracks > 0 && record.AudioTracks > 0)
-            distance += Math.Abs(item.AudioTracks - record.AudioTracks) * 0.16;
-        if (item.HasAssSubtitle != record.HasAssSubtitle) distance += 0.18;
-        if (!string.IsNullOrWhiteSpace(item.InputVideoCodec) && !string.IsNullOrWhiteSpace(record.InputVideoCodec) &&
-            !string.Equals(item.InputVideoCodec, record.InputVideoCodec, StringComparison.OrdinalIgnoreCase)) distance += 0.16;
-        if (!string.IsNullOrWhiteSpace(item.InputPixelFormat) && !string.IsNullOrWhiteSpace(record.InputPixelFormat))
-        {
-            var itemIs10Bit = item.InputPixelFormat.Contains("10", StringComparison.OrdinalIgnoreCase) || item.InputPixelFormat.Contains("p010", StringComparison.OrdinalIgnoreCase);
-            var recordIs10Bit = record.InputPixelFormat.Contains("10", StringComparison.OrdinalIgnoreCase) || record.InputPixelFormat.Contains("p010", StringComparison.OrdinalIgnoreCase);
-            if (itemIs10Bit != recordIs10Bit) distance += 0.12;
-        }
-        return distance;
-    }
-
-    private static double DefaultSizeRatio(string engine) => engine == "animejanai" ? 2.2 : 1.8;
-    private static double DefaultRealTimeFactor(string engine, string profile) => engine == "anime4k"
-        ? 0.75
-        : profile.Contains("Performance", StringComparison.OrdinalIgnoreCase) ? 2.5 : 4.5;
 
     private void RefreshOverall()
     {
@@ -3372,31 +3307,6 @@ public sealed record JobSettings(
 {
     public int ResourcePercent { get; init; } = 100;
 }
-public sealed record HistoryRecord(
-    DateTimeOffset Timestamp,
-    string Engine,
-    string Profile,
-    int Cq,
-    long InputBytes,
-    long OutputBytes,
-    double DurationSeconds,
-    double ElapsedSeconds,
-    int InputWidth = 1920,
-    int InputHeight = 1080,
-    long InputBitRate = 0,
-    int AudioTracks = 0,
-    bool HasAssSubtitle = false,
-    string InputVideoCodec = "",
-    string InputPixelFormat = "",
-    int Concurrency = 1,
-    bool IsBeta = false,
-    string BetaSignature = "",
-    int PipelineVersion = 0,
-    int SegmentSeconds = 0)
-{
-    public int ResourcePercent { get; init; } = 100;
-}
-public sealed record AdaptiveEstimate(long OutputBytes, double TotalSeconds, int SampleCount, double Confidence, string Basis);
 public sealed record PilotSamplePlan(int Index, long StartFrame, long FrameCount);
 public sealed record PilotProjection(
     double SpeedFactor,
@@ -3587,9 +3497,10 @@ public sealed class EncodeItem : INotifyPropertyChanged
     public bool HasAssSubtitle { get; private set; }
     public string InputVideoCodec { get; private set; } = "";
     public string InputPixelFormat { get; private set; } = "";
-    public long EstimatedOutputBytes { get => _estimatedOutputBytes; set { _estimatedOutputBytes = value; Notify(); Notify(nameof(EstimatedSizeText)); } }
+    public long EstimatedOutputBytes { get => _estimatedOutputBytes; set { _estimatedOutputBytes = value; Notify(); Notify(nameof(EstimatedSizeText)); Notify(nameof(SizeComparisonText)); } }
     public long ActualOutputBytes { get => _actualOutputBytes; set { _actualOutputBytes = value; Notify(); Notify(nameof(ActualSizeText)); Notify(nameof(SizeComparisonText)); } }
-    public double EstimatedTotalSeconds { get; set; }
+    private double _estimatedTotalSeconds;
+    public double EstimatedTotalSeconds { get => _estimatedTotalSeconds; set { _estimatedTotalSeconds = value; Notify(); Notify(nameof(EtaText)); } }
     private string _estimateBasis = "estimativa padrão";
     public string EstimateBasis { get => _estimateBasis; set { _estimateBasis = value; Notify(); } }
     public TimeSpan Elapsed { get => _elapsed; private set { _elapsed = value; Notify(); Notify(nameof(ElapsedText)); Notify(nameof(EtaText)); } }

@@ -30,6 +30,9 @@ internal sealed class QueueEntry
     public double Progress { get; set; }
     public double ElapsedSeconds { get; set; }
     public long OutputBytes { get; set; }
+    public long EstimatedOutputBytes { get; set; }
+    public double EstimatedTotalSeconds { get; set; }
+    public string EstimateBasis { get; set; } = "estimativa padrão";
 }
 
 internal static class SessionStore

@@ -1,5 +1,17 @@
 # Testes
 
+## Aprendizado das estimativas da fila
+
+`ReleaseChecks` simula conclusões sucessivas e verifica convergência de tamanho e
+tempo, normalização pela duração, preferência por medições recentes e isolamento
+por motor, modo de uso, pipeline e opções. Também confere a persistência da previsão
+original na sessão. Essas verificações não comprovam a precisão em episódios reais.
+
+`Test-AdaptiveQueueEstimates.ps1 -Package <build-isolado>` verifica a integração na
+interface sem processar mídia: conclusão sintética, atualização da linha/ETA,
+total com tamanhos reais e estimados, comparação original e reabertura da sessão.
+Use uma cópia do build sem pasta `data`; o teste grava fila e histórico sintéticos.
+
 ## Instalador da última versão
 
 `scripts/Build-LatestInstaller.ps1 -OutputDirectory <pasta> -Version <x.y.z>`

@@ -2,6 +2,7 @@
 
 ## Próxima versão
 
+- Refina automaticamente tamanho e tempo dos próximos episódios após cada conclusão, dando peso crescente às medições reais. Em empates de semelhança, prioriza execuções recentes. Atualiza o tempo exibido por item, soma os tamanhos reais dos concluídos no total e preserva as previsões originais para comparação, inclusive ao reabrir a fila.
 - O instalador da versão mais recente retoma transferências interrompidas pelo último byte salvo, com limite de espera, até três tentativas, cancelamento e conferência SHA-256 final.
 - Adiciona um instalador leve que consulta a última release estável a cada execução, baixa o Setup oficial e verifica tamanho e SHA-256 antes de instalar. Exige conexão, permite cancelar o download e pede para fechar o aplicativo antes da instalação para proteger filas ativas. O pacote completo por versão continua disponível para instalação offline e para o atualizador.
 - Após validar e salvar o vídeo final, remove automaticamente os blocos recuperáveis e temporários somente daquele trabalho. Preserva originais, caches de outros trabalhos e os blocos de falhas/cancelamentos. As medições por bloco ficam salvas num pequeno arquivo junto ao log.

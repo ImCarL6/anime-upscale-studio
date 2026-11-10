@@ -49,6 +49,9 @@ public partial class MainWindow
                 item.Processed = item.Status == "Concluído" ? item.Duration : TimeSpan.Zero;
                 item.RestoreElapsed(TimeSpan.FromSeconds(Math.Max(0, entry.ElapsedSeconds)));
                 item.ActualOutputBytes = entry.OutputBytes;
+                item.EstimatedOutputBytes = Math.Max(0, entry.EstimatedOutputBytes);
+                item.EstimatedTotalSeconds = double.IsFinite(entry.EstimatedTotalSeconds) ? Math.Max(0, entry.EstimatedTotalSeconds) : 0;
+                item.EstimateBasis = entry.EstimateBasis;
                 item.Error = entry.Error;
                 item.LogPath = entry.LogPath;
                 Items.Add(item);
@@ -110,6 +113,8 @@ public partial class MainWindow
                     InputPath = item.InputPath, OutputPath = item.OutputPath, Status = item.Status,
                     Error = item.Error, LogPath = item.LogPath, Progress = item.Progress,
                     ElapsedSeconds = item.Elapsed.TotalSeconds, OutputBytes = item.ActualOutputBytes,
+                    EstimatedOutputBytes = item.EstimatedOutputBytes, EstimatedTotalSeconds = item.EstimatedTotalSeconds,
+                    EstimateBasis = item.EstimateBasis,
                     Media = new MediaInfo(item.Duration, item.InputBytes, item.InputBitRate, item.InputVideoCodec,
                         item.InputPixelFormat, item.InputWidth, item.InputHeight, item.HasAssSubtitle,
                         Enumerable.Repeat("", item.AudioTracks).ToArray(), item.EstimatedAudioOutputBitRate)
