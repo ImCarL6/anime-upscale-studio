@@ -40,9 +40,14 @@ A primeira execução pode levar minutos preparando a engine na sua GPU.
 
 ## Instalação e atualizações
 
-O empacotamento usa **Velopack 1.2.0**, com .NET autocontido. Quando houver uma
-release publicada, o instalador estará em [Releases](https://github.com/ImCarL6/anime-upscale-studio/releases).
-Código no GitHub não significa que um instalador já foi publicado.
+[Baixe o instalador da versão mais recente](https://github.com/ImCarL6/anime-upscale-studio/releases/latest/download/AnimeUpscaleStudio-Instalar.exe).
+Mesmo se esse arquivo tiver sido baixado há algum tempo, ele consulta a última
+release estável a cada execução, baixa e verifica o pacote atual antes de instalar.
+Exige internet. Feche o aplicativo antes de instalar, aguardando o fim de qualquer processamento.
+
+Para instalação offline de uma versão específica, use o `Setup.exe` completo
+da respectiva [release](https://github.com/ImCarL6/anime-upscale-studio/releases).
+O empacotamento usa **Velopack 1.2.0**, com .NET autocontido.
 
 A versão instalada verifica atualizações ao abrir e a cada seis horas. Em
 **Atualizações e novidades**, veja o changelog e baixe uma versão nova.

@@ -1,5 +1,18 @@
 # Testes
 
+## Instalador da última versão
+
+`scripts/Build-LatestInstaller.ps1 -OutputDirectory <pasta> -Version <x.y.z>`
+compila e testa o instalador leve. Verifica versões futuras nos metadados,
+recusa drafts/prereleases, endereços externos ou de outra versão, digest ausente,
+download incompleto/corrompido e cancelamento, sem promover arquivos inválidos.
+Não remove um parcial preexistente de outro download.
+
+`AnimeUpscaleStudio-Instalar.exe --check-latest <relatório.json>` consulta a
+release estável real sem baixar/instalar. `--download-latest <relatório.json>`
+também baixa e confere o Setup, descartando somente seu download temporário,
+sem executar instalação. O modo normal abre a interface de instalação.
+
 ## Preparação antecipada (2.0.1)
 
 Consulte [SOURCE-PREFETCH.md](SOURCE-PREFETCH.md) para arquitetura, limites,

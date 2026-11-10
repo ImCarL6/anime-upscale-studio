@@ -19,6 +19,9 @@ jobs:
         run: dotnet build src/Anime4KEncoder/Anime4KEncoder.csproj -c Release -r win-x64 --no-restore
       - name: Verify persistent data across updates
         run: dotnet run --project tests/ReleaseChecks/ReleaseChecks.csproj
+      - name: Build and verify latest-version installer
+        shell: pwsh
+        run: ./scripts/Build-LatestInstaller.ps1 -OutputDirectory artifacts/latest-installer -Version 0.0.0
       - name: Parse PowerShell scripts
         shell: pwsh
         run: |

@@ -2,6 +2,7 @@
 
 ## Próxima versão
 
+- Adiciona um instalador leve que consulta a última release estável a cada execução, baixa o Setup oficial e verifica tamanho e SHA-256 antes de instalar. Exige conexão, permite cancelar o download e pede para fechar o aplicativo antes da instalação para proteger filas ativas. O pacote completo por versão continua disponível para instalação offline e para o atualizador.
 - Após validar e salvar o vídeo final, remove automaticamente os blocos recuperáveis e temporários somente daquele trabalho. Preserva originais, caches de outros trabalhos e os blocos de falhas/cancelamentos. As medições por bloco ficam salvas num pequeno arquivo junto ao log.
 - No modo Máximo, antecipa uma única extração do próximo bloco enquanto AnimeJaNai e AV1 processam o atual. A antecipação não altera o manifesto nem fixa a próxima fronteira; troca de modo cancela a preparação especulativa e a fronteira continua sendo decidida ao chegar ao bloco. Assistir/Equilibrado mantêm extração serial. Cancelamento drena o processo auxiliar antes de liberar a proteção de recursos; falta de espaço continua pausando a fila.
 - Registra no manifesto o tamanho do lossless, os tempos de extração e do núcleo, o modo na entrada do bloco e o aproveitamento da antecipação, como base para futuras estimativas por pasta. Não altera o algoritmo de estimativas nesta versão.

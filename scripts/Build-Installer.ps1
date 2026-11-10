@@ -43,6 +43,7 @@ Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $
 Copy-Item -LiteralPath (Join-Path $root 'scripts\managed-licenses') -Destination (Join-Path $stage 'licenses\managed') -Recurse
 & $vpk pack --packId ImCarL6.AnimeUpscaleStudio --packVersion $Version --packDir $stage --mainExe Anime4KEncoder.exe --packTitle 'Anime Upscale Studio' --packAuthors ImCarL6 --icon (Join-Path $root 'src\Anime4KEncoder\painter.ico') --releaseNotes $ReleaseNotes --channel win --outputDir $OutputDirectory
 if ($LASTEXITCODE) { throw 'Falha no empacotamento Velopack.' }
+& (Join-Path $PSScriptRoot 'Build-LatestInstaller.ps1') -OutputDirectory $OutputDirectory -Version $Version
 Get-ChildItem -LiteralPath $OutputDirectory -File | Where-Object Name -ne 'SHA256SUMS.txt' | ForEach-Object {
     "$((Get-FileHash -LiteralPath $_.FullName).Hash)  $($_.Name)"
 } | Set-Content -LiteralPath (Join-Path $OutputDirectory 'SHA256SUMS.txt') -Encoding utf8

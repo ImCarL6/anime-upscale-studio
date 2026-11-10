@@ -39,8 +39,21 @@ O primeiro instalador é grande; alterações somente no app podem ter deltas me
 
 ## Publicar
 
+`Build-Installer.ps1` também gera `AnimeUpscaleStudio-Instalar.exe`. Este executável
+leve usa o .NET Framework do Windows, consulta `/releases/latest` sem credenciais,
+aceita apenas o Setup do repositório oficial e verifica tamanho e SHA-256 informado
+pelo GitHub antes de executá-lo. Não instala pacote antigo quando está offline.
+Bloqueia a instalação enquanto houver uma instância do aplicativo aberta.
+O Setup completo continua fixo por versão, atendendo uso offline e Velopack.
+
+Todas as próximas releases estáveis devem incluir **ambos** os executáveis,
+com esses mesmos nomes. O link permanente recomendado no README aponta para
+`releases/latest/download/AnimeUpscaleStudio-Instalar.exe`.
+O [endpoint oficial de releases](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)
+e os [digests de assets](https://docs.github.com/en/rest/releases/assets) fornecem a seleção e a verificação.
+
 Criar inicialmente uma **draft release** no GitHub com tag `vX.Y.Z`, título,
-notas da versão e os arquivos da pasta de saída: Setup.exe, full.nupkg,
+notas da versão e os arquivos da pasta de saída: AnimeUpscaleStudio-Instalar.exe, Setup.exe, full.nupkg,
 delta.nupkg (quando houver), `releases.win.json`, portable ZIP e SHA256SUMS.txt.
 Usar os nomes gerados por Velopack. Não publicar somente o Setup.exe: o updater
 precisa do feed e do pacote completo. Cada release deve conter apenas um pacote
