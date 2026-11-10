@@ -48,7 +48,7 @@ namespace AnimeUpscaleStudioInstaller
                 var size = Convert.ToInt64(asset["size"]);
                 if (size <= 0 || size > 4L * 1024 * 1024 * 1024 || Convert.ToString(asset["state"]) != "uploaded")
                     throw new InvalidDataException("O instalador ainda não está disponível por completo.");
-                result = new Release { Version = tag, DownloadUrl = download, Sha256 = digest.Substring(7), Size = size };
+                result = new Release { Version = tag, DownloadUrl = url.AbsoluteUri, Sha256 = digest.Substring(7), Size = size };
             }
             if (result == null) throw new InvalidDataException("A última versão ainda não possui instalador para Windows.");
             return result;
@@ -81,81 +81,83 @@ namespace AnimeUpscaleStudioInstaller
             }
         }
 
-        internal static async Task Fetch(Release release, string path, IProgress<int> progress, CancellationToken token, HttpClient transport = null)
+        internal static async Task Fetch(Release release, string path, IProgress<int> progress, CancellationToken token,
+            Func<string, CancellationToken, Task> transport = null)
         {
-            const long chunkSize = 32L * 1024 * 1024;
             var partial = path + ".partial";
             var created = false;
             try
             {
-                var file = new FileStream(partial, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1024 * 1024, true);
+                using (var empty = new FileStream(partial, FileMode.CreateNew)) { }
                 created = true;
-                using (var output = file)
-                using (var client = transport ?? Client())
+                for (var attempt = 0; ; attempt++)
                 {
-                    var buffer = new byte[1024 * 1024];
-                    var previousPercent = -1;
-                    for (long start = 0; start < release.Size; start += chunkSize)
+                    token.ThrowIfCancellationRequested();
+                    try
                     {
-                        var end = Math.Min(release.Size - 1, start + chunkSize - 1);
-                        for (var attempt = 0; ; attempt++)
-                        {
-                            token.ThrowIfCancellationRequested();
-                            output.SetLength(start);
-                            output.Position = start;
-                            try
-                            {
-                                using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
-                                using (var request = new HttpRequestMessage(HttpMethod.Get, release.DownloadUrl))
-                                {
-                                    timeout.CancelAfter(TimeSpan.FromSeconds(90));
-                                    request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(start, end);
-                                    using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token))
-                                    using (timeout.Token.Register(delegate { response.Dispose(); }))
-                                    {
-                                        response.EnsureSuccessStatusCode();
-                                        if (response.RequestMessage.RequestUri.Scheme != "https") throw new InvalidDataException("O download exige uma conexão segura.");
-                                        var range = response.Content.Headers.ContentRange;
-                                        if (response.StatusCode != HttpStatusCode.PartialContent || range == null ||
-                                            range.From != start || range.To != end || range.Length != release.Size)
-                                            throw new InvalidDataException("O servidor não confirmou a parte solicitada do instalador. Tente novamente.");
-                                        using (var input = await response.Content.ReadAsStreamAsync())
-                                        {
-                                            long position = start;
-                                            while (position <= end)
-                                            {
-                                                var count = await input.ReadAsync(buffer, 0, (int)Math.Min(buffer.Length, end - position + 1), timeout.Token);
-                                                if (count == 0) throw new IOException("Download interrompido.");
-                                                await output.WriteAsync(buffer, 0, count, timeout.Token);
-                                                position += count;
-                                                var percent = (int)(100 * position / release.Size);
-                                                if (percent != previousPercent && progress != null) { progress.Report(percent); previousPercent = percent; }
-                                            }
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                            catch (Exception ex)
-                            {
-                                token.ThrowIfCancellationRequested();
-                                if (attempt >= 2 || ex is InvalidDataException) throw;
-                            }
-                            await Task.Delay(1000 * (attempt + 1), token);
-                        }
+                        if (transport != null) await transport(partial, token);
+                        else await FetchNative(release, partial, progress, token);
+                        break;
                     }
-                    await output.FlushAsync(token);
-                    output.Position = 0;
-                    var actual = await Task.Run(delegate
+                    catch (IOException)
                     {
-                        using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(output)).Replace("-", "");
-                    });
-                    Verify(release, output.Length, actual);
+                        token.ThrowIfCancellationRequested();
+                        if (attempt >= 2) throw;
+                    }
+                    await Task.Delay(1000 * (attempt + 1), token);
                 }
+                var actual = await Task.Run(delegate
+                {
+                    using (var input = File.OpenRead(partial))
+                    using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(input)).Replace("-", "");
+                });
+                Verify(release, new FileInfo(partial).Length, actual);
                 token.ThrowIfCancellationRequested();
                 File.Move(partial, path);
             }
             finally { if (created && File.Exists(partial)) File.Delete(partial); }
+        }
+
+        private static async Task FetchNative(Release release, string path, IProgress<int> progress, CancellationToken token)
+        {
+            // The Windows HTTP downloader supports resume and reliable cancellation of stalled reads.
+            var curl = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "curl.exe");
+            if (!File.Exists(curl)) throw new InvalidOperationException("Atualize o Windows para usar este instalador ou baixe o Setup completo na página de releases.");
+            var info = new ProcessStartInfo(curl)
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true,
+                Arguments = "--location --fail --silent --show-error --proto =https --proto-redir =https --connect-timeout 20 --max-time 2700 --speed-time 30 --speed-limit 65536 --continue-at - --output \"" + path + "\" \"" + release.DownloadUrl + "\""
+            };
+            using (var process = Process.Start(info))
+            {
+                if (process == null) throw new IOException("Não foi possível iniciar o download.");
+                using (token.Register(delegate { try { if (!process.HasExited) process.Kill(); } catch { } }))
+                {
+                    var error = process.StandardError.ReadToEndAsync();
+                    try
+                    {
+                        var previous = -1;
+                        while (!process.HasExited)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            var size = new FileInfo(path).Length;
+                            if (size > release.Size) throw new InvalidDataException("O download tem um tamanho diferente do publicado.");
+                            var percent = (int)(100 * size / release.Size);
+                            if (percent != previous && progress != null) { progress.Report(percent); previous = percent; }
+                            await Task.Delay(250, token);
+                        }
+                        await error;
+                        token.ThrowIfCancellationRequested();
+                        if (process.ExitCode != 0) throw new IOException("O download foi interrompido. Confira sua conexão e tente novamente.");
+                    }
+                    finally
+                    {
+                        if (!process.HasExited) process.Kill();
+                        process.WaitForExit();
+                        error.GetAwaiter().GetResult();
+                    }
+                }
+            }
         }
 
         private static void Verify(Release release, long size, string hash)

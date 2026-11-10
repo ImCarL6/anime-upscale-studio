@@ -43,8 +43,9 @@ O primeiro instalador é grande; alterações somente no app podem ter deltas me
 leve usa o .NET Framework do Windows, consulta `/releases/latest` sem credenciais,
 aceita apenas o Setup do repositório oficial e verifica tamanho e SHA-256 informado
 pelo GitHub antes de executá-lo. Não instala pacote antigo quando está offline.
-Baixa em partes de 32 MiB, com até três tentativas por parte e limite de 90 s
-por tentativa; uma interrupção refaz apenas a parte atual antes de seguir.
+Usa o curl fornecido pelo Windows, retoma o download pelo último byte salvo,
+com até três tentativas e interrupção de conexões sem progresso suficiente por
+30 s. Rejeita redirecionamento para HTTP e confere tamanho/SHA-256 completos.
 Bloqueia a instalação enquanto houver uma instância do aplicativo aberta.
 O Setup completo continua fixo por versão, atendendo uso offline e Velopack.
 
