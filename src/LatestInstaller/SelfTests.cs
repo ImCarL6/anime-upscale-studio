@@ -1,8 +1,11 @@
 using System;
 using System.IO;
+using System.Net;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace AnimeUpscaleStudioInstaller
 {
@@ -65,8 +68,49 @@ namespace AnimeUpscaleStudioInstaller
                 try { Download.SaveVerified(new MemoryStream(bytes), output, release, null, CancellationToken.None).GetAwaiter().GetResult(); }
                 catch (IOException) { }
                 Check(File.ReadAllText(output + ".partial") == "unrelated existing file", "An unrelated partial was overwritten or removed.");
+                File.Delete(output + ".partial");
+                var transport = new RangeTransport(bytes, true, false);
+                Download.Fetch(release, output, null, CancellationToken.None, new HttpClient(transport)).GetAwaiter().GetResult();
+                Check(transport.Calls == 2 && File.ReadAllText(output) == "fixture", "Interrupted range was not retried cleanly.");
+                File.Delete(output);
+                var wrongRange = new RangeTransport(bytes, false, true);
+                var invalidRangeRejected = false;
+                try { Download.Fetch(release, output, null, CancellationToken.None, new HttpClient(wrongRange)).GetAwaiter().GetResult(); }
+                catch (InvalidDataException) { invalidRangeRejected = true; }
+                Check(invalidRangeRejected && wrongRange.Calls == 1 && !File.Exists(output) && !File.Exists(output + ".partial"), "Wrong byte range was accepted or retried.");
+                var multiBytes = new byte[33 * 1024 * 1024];
+                multiBytes[0] = 17; multiBytes[multiBytes.Length - 1] = 53;
+                using (var sha = SHA256.Create()) release.Sha256 = BitConverter.ToString(sha.ComputeHash(multiBytes)).Replace("-", "");
+                release.Size = multiBytes.Length;
+                var multi = new RangeTransport(multiBytes, false, false);
+                Download.Fetch(release, output, null, CancellationToken.None, new HttpClient(multi)).GetAwaiter().GetResult();
+                Check(multi.Calls == 2 && new FileInfo(output).Length == multiBytes.Length, "Multiple ranges did not reconstruct the full file.");
             }
             finally { Directory.Delete(root, true); }
+        }
+
+        private sealed class RangeTransport : HttpMessageHandler
+        {
+            private readonly byte[] source;
+            private readonly bool interruptFirst, wrongRange;
+            internal int Calls;
+            internal RangeTransport(byte[] source, bool interruptFirst, bool wrongRange)
+            { this.source = source; this.interruptFirst = interruptFirst; this.wrongRange = wrongRange; }
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+            {
+                token.ThrowIfCancellationRequested();
+                Calls++;
+                var requested = System.Linq.Enumerable.Single(request.Headers.Range.Ranges);
+                var start = requested.From.Value;
+                var end = requested.To.Value;
+                var count = (int)(end - start + 1);
+                if (interruptFirst && Calls == 1) count = Math.Max(0, count - 4);
+                var body = new byte[count];
+                Buffer.BlockCopy(source, (int)start, body, 0, count);
+                var response = new HttpResponseMessage(HttpStatusCode.PartialContent) { RequestMessage = request, Content = new ByteArrayContent(body) };
+                response.Content.Headers.ContentRange = new System.Net.Http.Headers.ContentRangeHeaderValue(wrongRange ? start + 1 : start, end, source.Length);
+                return Task.FromResult(response);
+            }
         }
     }
 }

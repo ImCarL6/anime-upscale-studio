@@ -7,6 +7,8 @@ compila e testa o instalador leve. Verifica versões futuras nos metadados,
 recusa drafts/prereleases, endereços externos ou de outra versão, digest ausente,
 download incompleto/corrompido e cancelamento, sem promover arquivos inválidos.
 Não remove um parcial preexistente de outro download.
+Também simula um trecho de download interrompido, verifica repetição sem duplicar
+bytes, rejeita intervalos incorretos e reconstrói um arquivo com várias partes.
 
 `AnimeUpscaleStudio-Instalar.exe --check-latest <relatório.json>` consulta a
 release estável real sem baixar/instalar. `--download-latest <relatório.json>`

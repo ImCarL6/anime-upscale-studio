@@ -81,16 +81,87 @@ namespace AnimeUpscaleStudioInstaller
             }
         }
 
-        internal static async Task Fetch(Release release, string path, IProgress<int> progress, CancellationToken token)
+        internal static async Task Fetch(Release release, string path, IProgress<int> progress, CancellationToken token, HttpClient transport = null)
         {
-            using (var client = Client())
-            using (var response = await client.GetAsync(release.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, token))
+            const long chunkSize = 32L * 1024 * 1024;
+            var partial = path + ".partial";
+            var created = false;
+            try
             {
-                response.EnsureSuccessStatusCode();
-                if (response.RequestMessage.RequestUri.Scheme != "https") throw new InvalidDataException("O download exige uma conexão segura.");
-                using (var input = await response.Content.ReadAsStreamAsync())
-                    await SaveVerified(input, path, release, progress, token);
+                var file = new FileStream(partial, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1024 * 1024, true);
+                created = true;
+                using (var output = file)
+                using (var client = transport ?? Client())
+                {
+                    var buffer = new byte[1024 * 1024];
+                    var previousPercent = -1;
+                    for (long start = 0; start < release.Size; start += chunkSize)
+                    {
+                        var end = Math.Min(release.Size - 1, start + chunkSize - 1);
+                        for (var attempt = 0; ; attempt++)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            output.SetLength(start);
+                            output.Position = start;
+                            try
+                            {
+                                using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(token))
+                                using (var request = new HttpRequestMessage(HttpMethod.Get, release.DownloadUrl))
+                                {
+                                    timeout.CancelAfter(TimeSpan.FromSeconds(90));
+                                    request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(start, end);
+                                    using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token))
+                                    using (timeout.Token.Register(delegate { response.Dispose(); }))
+                                    {
+                                        response.EnsureSuccessStatusCode();
+                                        if (response.RequestMessage.RequestUri.Scheme != "https") throw new InvalidDataException("O download exige uma conexão segura.");
+                                        var range = response.Content.Headers.ContentRange;
+                                        if (response.StatusCode != HttpStatusCode.PartialContent || range == null ||
+                                            range.From != start || range.To != end || range.Length != release.Size)
+                                            throw new InvalidDataException("O servidor não confirmou a parte solicitada do instalador. Tente novamente.");
+                                        using (var input = await response.Content.ReadAsStreamAsync())
+                                        {
+                                            long position = start;
+                                            while (position <= end)
+                                            {
+                                                var count = await input.ReadAsync(buffer, 0, (int)Math.Min(buffer.Length, end - position + 1), timeout.Token);
+                                                if (count == 0) throw new IOException("Download interrompido.");
+                                                await output.WriteAsync(buffer, 0, count, timeout.Token);
+                                                position += count;
+                                                var percent = (int)(100 * position / release.Size);
+                                                if (percent != previousPercent && progress != null) { progress.Report(percent); previousPercent = percent; }
+                                            }
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                            catch (Exception ex)
+                            {
+                                token.ThrowIfCancellationRequested();
+                                if (attempt >= 2 || ex is InvalidDataException) throw;
+                            }
+                            await Task.Delay(1000 * (attempt + 1), token);
+                        }
+                    }
+                    await output.FlushAsync(token);
+                    output.Position = 0;
+                    var actual = await Task.Run(delegate
+                    {
+                        using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(output)).Replace("-", "");
+                    });
+                    Verify(release, output.Length, actual);
+                }
+                token.ThrowIfCancellationRequested();
+                File.Move(partial, path);
             }
+            finally { if (created && File.Exists(partial)) File.Delete(partial); }
+        }
+
+        private static void Verify(Release release, long size, string hash)
+        {
+            if (size != release.Size || !String.Equals(hash, release.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("O arquivo baixado não passou na verificação de integridade. Tente novamente.");
         }
 
         internal static async Task SaveVerified(Stream input, string path, Release release, IProgress<int> progress, CancellationToken token)
@@ -120,8 +191,7 @@ namespace AnimeUpscaleStudioInstaller
                     token.ThrowIfCancellationRequested();
                     hash.TransformFinalBlock(new byte[0], 0, 0);
                     var actual = BitConverter.ToString(hash.Hash).Replace("-", "");
-                    if (total != release.Size || !String.Equals(actual, release.Sha256, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidDataException("O arquivo baixado não passou na verificação de integridade. Tente novamente.");
+                    Verify(release, total, actual);
                 }
                 token.ThrowIfCancellationRequested();
                 File.Move(partial, path);
